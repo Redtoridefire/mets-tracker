@@ -1,0 +1,265 @@
+import { useWeather, weatherIcon, useMLBSchedule, useMLBStandings } from '../hooks.js';
+import { PROMOS } from '../data/promos.js';
+
+function getCountdown(isoDate) {
+  const diff = new Date(isoDate + 'T00:00:00') - new Date();
+  if (diff <= 0) return null;
+  return {
+    days: Math.floor(diff / 86400000),
+    hrs:  Math.floor((diff % 86400000) / 3600000),
+    mins: Math.floor((diff % 3600000) / 60000),
+  };
+}
+
+function WeatherWidget() {
+  const { data, loading, error } = useWeather();
+
+  if (loading) return (
+    <div className="card" style={{ padding: '1.25rem' }}>
+      <div className="card-title">🌤️ Citi Field Weather</div>
+      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div style={{ fontSize: '2.5rem' }}>⏳</div>
+        <div>
+          <div className="loading-shimmer" style={{ width: 100, height: 32, marginBottom: 8 }} />
+          <div className="loading-shimmer" style={{ width: 160, height: 14 }} />
+        </div>
+      </div>
+    </div>
+  );
+
+  if (error || !data) return (
+    <div className="card" style={{ padding: '1.25rem' }}>
+      <div className="card-title">🌤️ Citi Field Weather</div>
+      <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Weather unavailable — check back soon</div>
+    </div>
+  );
+
+  return (
+    <div className="card" style={{ padding: '1.25rem' }}>
+      <div className="card-title">🌤️ Citi Field Weather · Flushing, NY</div>
+      <div className="weather-card" style={{ padding: 0, border: 'none', background: 'none', gap: '1.25rem' }}>
+        <div className="weather-icon">{weatherIcon(data.code)}</div>
+        <div style={{ flex: 1 }}>
+          <div className="weather-temp">{data.tempF}°F <span style={{ fontSize: '1rem', color: 'var(--text2)' }}>/ {data.tempC}°C</span></div>
+          <div className="weather-desc">{data.desc}</div>
+          <div className="weather-meta">
+            <span>💧 {data.humidity}%</span>
+            <span>💨 {data.windMph} mph {data.windDir}</span>
+            <span>🌡️ Feels {data.feelsLikeF}°F</span>
+            {parseFloat(data.precipMM) > 0 && <span>🌧️ {data.precipMM}mm</span>}
+            <span>☀️ UV {data.uvIndex}</span>
+          </div>
+        </div>
+      </div>
+      {data.forecast?.length > 0 && (
+        <div className="weather-forecast">
+          {data.forecast.map((d, i) => (
+            <div key={i} className="forecast-day">
+              <div className="date">{i === 0 ? 'TODAY' : i === 1 ? 'TMW' : new Date(d.date + 'T12:00:00').toLocaleDateString('en',{weekday:'short'}).toUpperCase()}</div>
+              <div className="icon">{weatherIcon(d.code)}</div>
+              <div className="temp">{d.maxF}° / {d.minF}°</div>
+              <div className="rain">💧{d.chanceRain}%</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StandingsWidget() {
+  const { standings, loading } = useMLBStandings();
+
+  if (loading) return (
+    <div className="card">
+      <div className="card-title">📊 NL East Standings</div>
+      {[1,2,3,4,5].map(i => <div key={i} className="loading-shimmer" style={{ height: 28, marginBottom: 8 }} />)}
+    </div>
+  );
+
+  if (!standings) return (
+    <div className="card">
+      <div className="card-title">📊 NL East Standings</div>
+      <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Standings not yet available — season starting soon!</div>
+    </div>
+  );
+
+  return (
+    <div className="card">
+      <div className="card-title">📊 {standings.division}</div>
+      {standings.teams?.map((t, i) => {
+        const isMets = t.team?.id === 121;
+        return (
+          <div key={t.team?.id} className={`standings-row ${isMets ? 'mets-row' : ''}`}>
+            <span style={{ fontFamily: 'Bebas Neue', fontSize: '1.1rem', color: 'var(--muted)', width: 20 }}>{i+1}</span>
+            <span style={{ fontFamily: 'Oswald', fontSize: '0.82rem', flex: 1, color: isMets ? 'white' : 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              {isMets ? '⚾ ' : ''}{t.team?.name}
+            </span>
+            <span style={{ fontFamily: 'Bebas Neue', fontSize: '1rem', color: isMets ? 'var(--orange)' : 'var(--text2)', minWidth: 50, textAlign: 'right' }}>
+              {t.wins}-{t.losses}
+            </span>
+            <span style={{ fontSize: '0.6rem', color: 'var(--muted)', minWidth: 40, textAlign: 'right', fontFamily: 'DM Mono' }}>
+              {i === 0 ? '—' : t.gamesBack === '0.0' ? '—' : `GB ${t.gamesBack}`}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RecentGamesWidget() {
+  const { games, loading } = useMLBSchedule();
+
+  const recent = games.filter(g => g.result !== null).slice(0, 5);
+  const live   = games.filter(g => g.statusCode === 'I').slice(0, 1);
+
+  if (loading) return (
+    <div className="card">
+      <div className="card-title">🎮 Recent Results</div>
+      {[1,2,3].map(i => <div key={i} className="loading-shimmer" style={{ height: 48, marginBottom: 8 }} />)}
+    </div>
+  );
+
+  const allShow = [...live, ...recent].slice(0, 5);
+
+  return (
+    <div className="card">
+      <div className="card-title">🎮 Recent Results</div>
+      {allShow.length === 0 && (
+        <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Season hasn't started yet — games incoming!</div>
+      )}
+      {allShow.map(g => {
+        const isLive = g.statusCode === 'I';
+        return (
+          <div key={g.gamePk} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0', borderBottom: '1px solid rgba(0,45,92,0.3)' }}>
+            <div style={{ minWidth: 70 }}>
+              {isLive ? (
+                <span className="badge badge-live">LIVE {g.inning}{g.inningHalf === 'Top' ? '▲' : '▼'}</span>
+              ) : (
+                <span className={`badge badge-${g.result === 'W' ? 'win' : 'loss'}`}>{g.result}</span>
+              )}
+            </div>
+            <div style={{ flex: 1, fontFamily: 'Oswald', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text)' }}>
+              {g.isHome ? 'vs' : '@'} {g.oppName}
+            </div>
+            {(g.metsScore !== undefined && g.metsScore !== null) && (
+              <div style={{ fontFamily: 'Bebas Neue', fontSize: '1.1rem', color: g.result === 'W' ? 'var(--win)' : g.result === 'L' ? 'var(--loss)' : 'var(--text)', letterSpacing: '0.05em' }}>
+                {g.metsScore} – {g.oppScore}
+              </div>
+            )}
+            <div style={{ fontSize: '0.58rem', color: 'var(--muted)', minWidth: 64, textAlign: 'right' }}>
+              {new Date(g.displayDate).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function OverviewView({ userData }) {
+  const { gameRecords = {}, eggrollLog = {} } = userData;
+  const today = new Date().toISOString().slice(0, 10);
+
+  const attended       = Object.values(gameRecords).filter(r => r?.attended).length;
+  const promoCollected = Object.values(gameRecords).filter(r => r?.promoCollected).length;
+  const wins           = Object.values(gameRecords).filter(r => r?.result === 'W').length;
+  const losses         = Object.values(gameRecords).filter(r => r?.result === 'L').length;
+  const eggrollCount   = Object.values(eggrollLog).filter(r => r?.logged).length;
+  const totalSpent     = Object.values(gameRecords).reduce((sum, r) => sum + (r?.totalCost || 0), 0);
+
+  const nextGame = PROMOS.find(p => p.isoDate >= today && !gameRecords[p.id]?.attended) || null;
+  const countdown = nextGame ? getCountdown(nextGame.isoDate) : null;
+
+  return (
+    <>
+      <div className="page-hdr">
+        <div className="page-title">🏟️ Mets HQ — 2026</div>
+        <div className="page-sub">Season Command Center · Citi Field · Flushing, NY</div>
+      </div>
+
+      <div className="stats-row">
+        <div className="stat-card"><div className="big">{attended}</div><div className="lbl">Games Attended</div></div>
+        <div className="stat-card"><div className="big">{promoCollected}</div><div className="lbl">Promos Snagged</div></div>
+        <div className="stat-card">
+          <div className="big" style={{ color: wins > losses ? 'var(--win)' : wins < losses ? 'var(--loss)' : 'var(--orange)' }}>
+            {wins}‑{losses}
+          </div>
+          <div className="lbl">Your W-L</div>
+        </div>
+        <div className="stat-card"><div className="big">{eggrollCount}</div><div className="lbl">Eggrolls Tried</div></div>
+        <div className="stat-card">
+          <div className="big" style={{ color: 'var(--gold)', fontSize: '2rem' }}>${totalSpent.toFixed(0)}</div>
+          <div className="lbl">Total Spent</div>
+        </div>
+        <div className="stat-card"><div className="big">{20 - attended}</div><div className="lbl">Promos Left</div></div>
+      </div>
+
+      {nextGame && countdown && (
+        <div className="card" style={{ marginBottom: '1.5rem', borderColor: 'rgba(255,89,16,0.3)', background: 'linear-gradient(135deg, var(--card), rgba(255,89,16,0.04))' }}>
+          <div className="card-title">⏳ Next Promo Game</div>
+          <div style={{ fontFamily: 'Bebas Neue', fontSize: '1.5rem', color: 'white', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>
+            {nextGame.emoji} vs {nextGame.opponent} · {nextGame.display} · {nextGame.time}
+          </div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text2)', marginBottom: '1rem' }}>
+            {nextGame.icon} {nextGame.promo}
+            {nextGame.specialTicket && <span className="badge badge-special" style={{ marginLeft: '0.5rem' }}>Special Ticket</span>}
+            {nextGame.limit && <span className="badge badge-limit" style={{ marginLeft: '0.5rem' }}>First {nextGame.limit.toLocaleString()}</span>}
+          </div>
+          <div className="countdown">
+            <div className="cd-unit"><span className="cd-val">{String(countdown.days).padStart(2,'0')}</span><span className="cd-lbl">Days</span></div>
+            <span className="cd-sep">:</span>
+            <div className="cd-unit"><span className="cd-val">{String(countdown.hrs).padStart(2,'0')}</span><span className="cd-lbl">Hours</span></div>
+            <span className="cd-sep">:</span>
+            <div className="cd-unit"><span className="cd-val">{String(countdown.mins).padStart(2,'0')}</span><span className="cd-lbl">Mins</span></div>
+          </div>
+        </div>
+      )}
+
+      <WeatherWidget />
+
+      <div style={{ height: '1.5rem' }} />
+
+      <div className="grid-2">
+        <RecentGamesWidget />
+        <StandingsWidget />
+      </div>
+
+      <div style={{ height: '1.5rem' }} />
+
+      <div className="grid-2">
+        <div className="card">
+          <div className="card-title">🗓️ Upcoming Promo Games</div>
+          {PROMOS.filter(p => p.isoDate >= today).slice(0, 6).map(p => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.55rem 0', borderBottom: '1px solid rgba(0,45,92,0.3)' }}>
+              <span style={{ fontFamily: 'DM Mono', fontSize: '0.62rem', color: 'var(--muted)', minWidth: 62 }}>{p.display}</span>
+              <span>{p.emoji}</span>
+              <span style={{ fontFamily: 'Oswald', fontSize: '0.78rem', flex: 1, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{p.opponent}</span>
+              <span style={{ fontSize: '0.85rem' }}>{p.icon}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="card">
+          <div className="card-title">🏆 My Recent Games</div>
+          {Object.entries(gameRecords).filter(([,r]) => r?.attended).slice(-6).reverse().map(([id, rec]) => {
+            const p = PROMOS.find(pr => pr.id === Number(id));
+            if (!p) return null;
+            return (
+              <div key={id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.55rem 0', borderBottom: '1px solid rgba(0,45,92,0.3)' }}>
+                <span style={{ fontFamily: 'DM Mono', fontSize: '0.62rem', color: 'var(--muted)', minWidth: 62 }}>{p.display}</span>
+                <span>{p.emoji}</span>
+                <span style={{ fontFamily: 'Oswald', fontSize: '0.78rem', flex: 1, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{p.opponent}</span>
+                {rec.result && <span className={`badge badge-${rec.result === 'W' ? 'win' : 'loss'}`}>{rec.result}</span>}
+                {rec.promoCollected && <span title={p.promo}>{p.icon}</span>}
+                {rec.totalCost > 0 && <span style={{ fontSize: '0.65rem', color: 'var(--gold)' }}>${rec.totalCost}</span>}
+              </div>
+            );
+          })}
+          {attended === 0 && <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>No games logged yet — head to Schedule!</div>}
+        </div>
+      </div>
+    </>
+  );
+}
