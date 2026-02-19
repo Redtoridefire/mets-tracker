@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useWeather, weatherIcon, useMLBSchedule, useMLBStandings } from '../hooks.js';
 import { PROMOS } from '../data/promos.js';
 
@@ -158,7 +159,123 @@ function RecentGamesWidget() {
   );
 }
 
-export default function OverviewView({ userData }) {
+// ─── GAME DAY CARD ────────────────────────────────────────────────────────────
+function GameDayCard({ todayGame, todayPromo, onLogGame }) {
+  const [timeLeft, setTimeLeft] = useState(null);
+
+  const isFinal = todayGame.result !== null || ['F','FO','FT','FR'].includes(todayGame.statusCode);
+  const isLive  = todayGame.statusCode === 'I';
+  const homeAway = todayGame.isHome ? 'vs' : '@';
+
+  useEffect(() => {
+    if (!todayGame?.date || isFinal || isLive) return;
+    const tick = () => {
+      const diff = new Date(todayGame.date) - new Date();
+      if (diff <= 0) { setTimeLeft(null); return; }
+      setTimeLeft({
+        h: Math.floor(diff / 3600000),
+        m: Math.floor((diff % 3600000) / 60000),
+        s: Math.floor((diff % 60000) / 1000),
+      });
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [todayGame?.date, isFinal, isLive]);
+
+  return (
+    <div className="gameday-card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+        <div>
+          <div style={{ fontFamily: 'Oswald', fontSize: '0.58rem', letterSpacing: '0.28em', color: 'var(--orange)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+            ⚾ Game Day
+          </div>
+          <div style={{ fontFamily: 'Bebas Neue', fontSize: '1.9rem', letterSpacing: '0.08em', color: 'white', lineHeight: 1 }}>
+            Mets {homeAway} {todayGame.oppName}
+          </div>
+          <div style={{ fontSize: '0.62rem', color: 'var(--text2)', fontFamily: 'Oswald', letterSpacing: '0.08em', marginTop: '0.2rem' }}>
+            {todayGame.venue}{todayPromo?.time ? ` · ${todayPromo.time}` : ''}
+          </div>
+        </div>
+        {todayPromo && (
+          <button className="btn btn-primary" onClick={() => onLogGame(todayPromo)}>
+            {isFinal ? '📝 Log This Game' : '+ Quick Log'}
+          </button>
+        )}
+      </div>
+
+      {todayPromo && (
+        <div style={{ background: 'rgba(255,89,16,0.1)', border: '1px solid rgba(255,89,16,0.25)', borderRadius: 6, padding: '0.55rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.82rem' }}>{todayPromo.icon}</span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--orange)', fontFamily: 'Oswald', letterSpacing: '0.06em' }}>
+            {todayPromo.promo.split(' (')[0]}
+          </span>
+          {todayPromo.limit && (
+            <span className="badge badge-limit" style={{ marginLeft: 'auto' }}>First {todayPromo.limit.toLocaleString()}</span>
+          )}
+          {todayPromo.specialTicket && (
+            <span className="badge badge-special">Special Ticket</span>
+          )}
+        </div>
+      )}
+
+      {isLive ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <span className="badge badge-live" style={{ fontSize: '0.78rem', padding: '0.35rem 0.8rem' }}>🔴 LIVE</span>
+          <span style={{ fontFamily: 'Bebas Neue', fontSize: '2.2rem', letterSpacing: '0.06em', lineHeight: 1, color: 'var(--text)' }}>
+            {todayGame.metsScore ?? 0} – {todayGame.oppScore ?? 0}
+          </span>
+          {todayGame.inning && (
+            <span style={{ fontSize: '0.7rem', color: 'var(--muted)', fontFamily: 'Oswald', letterSpacing: '0.1em' }}>
+              {todayGame.inningHalf === 'Top' ? '▲' : '▼'}{todayGame.inning} Inn
+            </span>
+          )}
+        </div>
+      ) : isFinal ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <span className={`badge badge-${todayGame.result === 'W' ? 'win' : todayGame.result === 'L' ? 'loss' : 'gold'}`} style={{ fontSize: '0.78rem', padding: '0.35rem 0.8rem' }}>
+            {todayGame.result === 'W' ? 'WIN ✓' : todayGame.result === 'L' ? 'LOSS ✗' : 'FINAL'}
+          </span>
+          {todayGame.metsScore != null && (
+            <span style={{ fontFamily: 'Bebas Neue', fontSize: '2.2rem', letterSpacing: '0.06em', lineHeight: 1, color: todayGame.result === 'W' ? 'var(--win)' : todayGame.result === 'L' ? 'var(--loss)' : 'var(--text)' }}>
+              {todayGame.metsScore} – {todayGame.oppScore}
+            </span>
+          )}
+          {!todayPromo && (
+            <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'DM Mono' }}>
+              (Non-promo game — log via Schedule tab)
+            </span>
+          )}
+        </div>
+      ) : timeLeft ? (
+        <div>
+          <div style={{ fontFamily: 'Oswald', fontSize: '0.52rem', letterSpacing: '0.22em', color: 'var(--muted)', marginBottom: '0.35rem', textTransform: 'uppercase' }}>
+            First Pitch In
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            {[['h','Hrs'],['m','Min'],['s','Sec']].map(([key, lbl], i) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                {i > 0 && <span style={{ fontFamily: 'Bebas Neue', fontSize: '1.8rem', color: 'var(--border2)', lineHeight: 1, marginBottom: '12px' }}>:</span>}
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'Bebas Neue', fontSize: '2.5rem', color: 'var(--orange)', lineHeight: 1 }}>
+                    {String(timeLeft[key]).padStart(2, '0')}
+                  </div>
+                  <div style={{ fontFamily: 'Oswald', fontSize: '0.45rem', color: 'var(--muted)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>{lbl}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div style={{ fontSize: '0.72rem', color: 'var(--orange)', fontFamily: 'Oswald', letterSpacing: '0.1em' }}>
+          ⚾ PLAY BALL — Game time is here!
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function OverviewView({ userData, todayGame, todayPromo, onLogGame }) {
   const { gameRecords = {}, eggrollLog = {} } = userData;
   const today = new Date().toISOString().slice(0, 10);
 
@@ -178,6 +295,14 @@ export default function OverviewView({ userData }) {
         <div className="page-title">🏟️ Mets HQ — 2026</div>
         <div className="page-sub">Season Command Center · Citi Field · Flushing, NY</div>
       </div>
+
+      {todayGame && (
+        <GameDayCard
+          todayGame={todayGame}
+          todayPromo={todayPromo}
+          onLogGame={onLogGame}
+        />
+      )}
 
       <div className="stats-row">
         <div className="stat-card"><div className="big">{attended}</div><div className="lbl">Games Attended</div></div>

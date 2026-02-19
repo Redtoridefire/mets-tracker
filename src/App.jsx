@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import CSS from './styles.js';
 import { PROMOS } from './data/promos.js';
+import { useMLBSchedule } from './hooks.js';
 import {
   getProfiles, createProfile, deleteProfile,
   getActiveProfileId, setActiveProfileId,
@@ -13,14 +14,14 @@ import { ScheduleView, MyGamesView, TrophyView, EggrollView, MapView } from './v
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 const TABS = [
-  { id:'overview',  icon:'🏟️', label:'Home Base'       },
-  { id:'scores',    icon:'🎮', label:'Live Scores'      },
-  { id:'schedule',  icon:'📅', label:'Schedule'         },
-  { id:'mygames',   icon:'🎟️', label:'My Games'         },
-  { id:'players',   icon:'👥', label:'Player Stats'     },
-  { id:'trophy',    icon:'🏆', label:'Trophy Shelf'     },
-  { id:'eggroll',   icon:'🥚', label:'Eggroll Log'      },
-  { id:'map',       icon:'🗺️', label:'Citi Field Map'   },
+  { id:'overview',  icon:'🏟️', label:'Home Base',     short:'Home'     },
+  { id:'scores',    icon:'🎮', label:'Live Scores',   short:'Scores'   },
+  { id:'schedule',  icon:'📅', label:'Schedule',      short:'Sched'    },
+  { id:'mygames',   icon:'🎟️', label:'My Games',      short:'Games'    },
+  { id:'players',   icon:'👥', label:'Player Stats',  short:'Players'  },
+  { id:'trophy',    icon:'🏆', label:'Trophy Shelf',  short:'Trophy'   },
+  { id:'eggroll',   icon:'🥚', label:'Eggroll Log',   short:'Eggroll'  },
+  { id:'map',       icon:'🗺️', label:'Citi Field Map',short:'Map'      },
 ];
 
 // ─── AVATAR PICKER ────────────────────────────────────────────────────────────
@@ -292,17 +293,19 @@ function Header({ profile, userData, onSwitchProfile }) {
         </div>
       </div>
       <div className="hdr-right">
-        <div className="hdr-stat"><div className="v">{attended}</div><div className="l">Games</div></div>
-        <div className="hdr-div" />
-        <div className="hdr-stat"><div className="v">{promoCollected}</div><div className="l">Promos</div></div>
-        <div className="hdr-div" />
-        <div className="hdr-stat">
-          <div className="v" style={{ color: wins > losses ? 'var(--win)' : wins < losses ? 'var(--loss)' : 'var(--orange)' }}>{wins}‑{losses}</div>
-          <div className="l">W-L</div>
+        <div className="hdr-stats">
+          <div className="hdr-stat"><div className="v">{attended}</div><div className="l">Games</div></div>
+          <div className="hdr-div" />
+          <div className="hdr-stat"><div className="v">{promoCollected}</div><div className="l">Promos</div></div>
+          <div className="hdr-div" />
+          <div className="hdr-stat">
+            <div className="v" style={{ color: wins > losses ? 'var(--win)' : wins < losses ? 'var(--loss)' : 'var(--orange)' }}>{wins}‑{losses}</div>
+            <div className="l">W-L</div>
+          </div>
+          <div className="hdr-div" />
+          <div className="hdr-stat"><div className="v" style={{ color: 'var(--gold)', fontSize: '1.2rem' }}>${totalSpent.toFixed(0)}</div><div className="l">Spent</div></div>
+          <div className="hdr-div" />
         </div>
-        <div className="hdr-div" />
-        <div className="hdr-stat"><div className="v" style={{ color: 'var(--gold)', fontSize: '1.2rem' }}>${totalSpent.toFixed(0)}</div><div className="l">Spent</div></div>
-        <div className="hdr-div" />
         <button className="profile-btn" onClick={() => setShowSwitcher(true)}>
           <span className="profile-avatar">{profile?.avatar || '⚾'}</span>
           {profile?.name || 'Guest'}
@@ -319,6 +322,65 @@ function Header({ profile, userData, onSwitchProfile }) {
   );
 }
 
+// ─── MOBILE BOTTOM NAV ────────────────────────────────────────────────────────
+function MobileNav({ tab, setTab, attended, promoCollected }) {
+  return (
+    <nav className="mobile-nav">
+      {TABS.map(t => (
+        <div
+          key={t.id}
+          className={`mobile-nav-item ${tab === t.id ? 'active' : ''}`}
+          onClick={() => setTab(t.id)}
+        >
+          <span className="mob-icon">{t.icon}</span>
+          <span className="mob-label">{t.short}</span>
+          {t.id === 'mygames'  && attended > 0        && <span className="mob-badge">{attended}</span>}
+          {t.id === 'trophy'   && promoCollected > 0   && <span className="mob-badge">{promoCollected}</span>}
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+// ─── GAME DAY BANNER ──────────────────────────────────────────────────────────
+function GameDayBanner({ todayGame, todayPromo, onLogGame }) {
+  const isFinal = todayGame.result !== null || ['F','FO','FT','FR'].includes(todayGame.statusCode);
+  const isLive  = todayGame.statusCode === 'I';
+  const homeAway = todayGame.isHome ? 'vs' : '@';
+
+  return (
+    <div className="gameday-banner">
+      <div className="gameday-dot" />
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', minWidth: 0 }}>
+        {isFinal ? (
+          <span style={{ fontFamily: 'Oswald', fontSize: '0.8rem', letterSpacing: '0.12em', color: todayGame.result === 'W' ? 'var(--win)' : todayGame.result === 'L' ? 'var(--loss)' : 'var(--text2)', textTransform: 'uppercase' }}>
+            FINAL · Mets {todayGame.metsScore}–{todayGame.oppScore} {homeAway} {todayGame.oppName}
+          </span>
+        ) : isLive ? (
+          <span style={{ fontFamily: 'Oswald', fontSize: '0.8rem', letterSpacing: '0.12em', color: '#ff6b6b', textTransform: 'uppercase' }}>
+            🔴 LIVE · Mets {todayGame.metsScore ?? 0}–{todayGame.oppScore ?? 0} {homeAway} {todayGame.oppName}
+            {todayGame.inning && <span> · {todayGame.inningHalf === 'Top' ? '▲' : '▼'}{todayGame.inning}</span>}
+          </span>
+        ) : (
+          <span style={{ fontFamily: 'Oswald', fontSize: '0.8rem', letterSpacing: '0.12em', color: 'var(--orange)', textTransform: 'uppercase' }}>
+            🔴 GAME DAY — {homeAway} {todayGame.oppName} · {todayGame.venue}
+          </span>
+        )}
+        {todayPromo && (
+          <span style={{ fontSize: '0.68rem', color: 'var(--text2)', fontFamily: 'DM Mono', whiteSpace: 'nowrap' }}>
+            🎁 {todayPromo.promo.split(' (')[0]}
+          </span>
+        )}
+      </div>
+      {todayPromo && (
+        <button className="btn btn-primary btn-sm" onClick={() => onLogGame(todayPromo)} style={{ flexShrink: 0 }}>
+          {isFinal ? '📝 Log Game' : '+ Log Game'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [profileId,  setProfileId]  = useState(() => getActiveProfileId());
@@ -327,6 +389,12 @@ export default function App() {
   const [editGame,   setEditGame]   = useState(null);
 
   const profile = useMemo(() => getProfiles().find(p => p.id === profileId) || null, [profileId]);
+
+  // Game Day detection — called at App level so banner + Overview card share the data
+  const { games: scheduleGames } = useMLBSchedule();
+  const todayStr   = new Date().toISOString().slice(0, 10);
+  const todayGame  = scheduleGames.find(g => g.displayDate === todayStr && g.gameType === 'R') || null;
+  const todayPromo = PROMOS.find(p => p.isoDate === todayStr) || null;
 
   // Reload user data when profile changes
   useEffect(() => {
@@ -374,6 +442,15 @@ export default function App() {
     <>
       <style>{CSS}</style>
       <Header profile={profile} userData={userData} onSwitchProfile={handleSwitchProfile} />
+
+      {todayGame && (
+        <GameDayBanner
+          todayGame={todayGame}
+          todayPromo={todayPromo}
+          onLogGame={setEditGame}
+        />
+      )}
+
       <div className="layout">
         <nav className="sidebar">
           <div className="nav-sec">Navigation</div>
@@ -388,7 +465,7 @@ export default function App() {
         </nav>
 
         <main className="main">
-          {tab === 'overview'  && <OverviewView    userData={userData} />}
+          {tab === 'overview'  && <OverviewView    userData={userData} todayGame={todayGame} todayPromo={todayPromo} onLogGame={setEditGame} />}
           {tab === 'scores'    && <LiveScoresView  />}
           {tab === 'schedule'  && <ScheduleView    userData={userData} onEditGame={setEditGame} />}
           {tab === 'mygames'   && <MyGamesView     userData={userData} onEditGame={setEditGame} />}
@@ -398,6 +475,8 @@ export default function App() {
           {tab === 'map'       && <MapView         userData={userData} />}
         </main>
       </div>
+
+      <MobileNav tab={tab} setTab={setTab} attended={attended} promoCollected={promoCollected} />
 
       {editGame && (
         <GameModal
