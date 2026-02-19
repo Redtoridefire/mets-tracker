@@ -259,7 +259,7 @@ const CSS = `
   }
 
   /* ── TABLE ──────────────────────────────────────────────────────────────── */
-  .tbl-wrap { overflow-x: auto; }
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
   thead tr { border-bottom: 2px solid var(--orange); }
   th {
@@ -542,13 +542,194 @@ const CSS = `
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--blue2); }
 
-  @media (max-width: 900px) {
-    .sidebar, .hdr-right { display: none; }
-    .main { padding: 1rem; }
-    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  /* ── GAME DAY BANNER ─────────────────────────────────────────────────────── */
+  .gameday-banner {
+    background: linear-gradient(90deg, rgba(255,89,16,0.14), rgba(255,89,16,0.07), rgba(255,89,16,0.14));
+    border-bottom: 1px solid rgba(255,89,16,0.35);
+    padding: 0.5rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    position: sticky;
+    top: 64px;
+    z-index: 90;
+    backdrop-filter: blur(10px);
+    animation: gameday-glow 3s ease-in-out infinite;
+    flex-wrap: wrap;
+  }
+
+  @keyframes gameday-glow {
+    0%, 100% { background: linear-gradient(90deg, rgba(255,89,16,0.14), rgba(255,89,16,0.07), rgba(255,89,16,0.14)); }
+    50%       { background: linear-gradient(90deg, rgba(255,89,16,0.22), rgba(255,89,16,0.13), rgba(255,89,16,0.22)); }
+  }
+
+  .gameday-dot {
+    width: 9px; height: 9px;
+    background: var(--orange);
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 6px rgba(255,89,16,0.7);
+    animation: pulse-red 1.2s ease-in-out infinite;
+  }
+
+  .gameday-card {
+    background: linear-gradient(135deg, rgba(255,89,16,0.1), rgba(255,89,16,0.03));
+    border: 1px solid rgba(255,89,16,0.35);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .gameday-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--orange), transparent);
+    animation: gameday-glow 2s ease-in-out infinite;
+  }
+
+  /* ── HEADER STATS (wraps the stat chips, hidden on mobile) ───────────────── */
+  .hdr-stats {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+  }
+
+  /* ── MOBILE NAV (bottom tab bar, hidden on desktop) ─────────────────────── */
+  .mobile-nav { display: none; }
+
+  /* ── RESPONSIVE ─────────────────────────────────────────────────────────── */
+  @media (max-width: 768px) {
+    /* Header */
+    .hdr {
+      height: 56px;
+      padding: 0 1rem;
+    }
+    .hdr-stats { display: none; }
+    .hdr-tag   { display: none; }
+
+    /* Sidebar → hidden; bottom nav takes over */
+    .sidebar { display: none; }
+
+    /* Layout: make room for fixed bottom nav */
+    .layout { /* flex already set */ }
+    .main   { padding: 0.9rem 0.875rem 80px; }
+
+    /* Typography */
+    .page-title { font-size: 1.8rem; }
+
+    /* Grids → single column */
+    .grid-2  { grid-template-columns: 1fr; }
+    .grid-3  { grid-template-columns: 1fr; }
+    .grid-auto { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+
+    /* Trophy grid (used in TrophyView): allow 2-col on mobile */
+    .stats-row { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
+
+    /* Map */
     .map-wrap { flex-direction: column; }
     .map-side { width: 100%; }
+
+    /* Modal → bottom sheet */
+    .overlay { align-items: flex-end; }
+    .modal {
+      width: 100%;
+      max-width: 100%;
+      max-height: 92vh;
+      border-radius: 14px 14px 0 0;
+      padding: 1.5rem 1.25rem 2rem;
+      border-left: none;
+      border-right: none;
+      border-bottom: none;
+    }
+
+    /* Forms → single column on mobile */
+    .form-row   { grid-template-columns: 1fr; }
+    .form-row-3 { grid-template-columns: 1fr; }
+
+    /* Touch targets */
+    .btn     { min-height: 44px; }
+    .btn-sm  { min-height: 36px; }
+
+    /* Weather */
+    .weather-card { flex-wrap: wrap; gap: 0.75rem; }
+
+    /* Game Day Banner */
+    .gameday-banner {
+      top: 56px;
+      padding: 0.4rem 0.875rem;
+      gap: 0.5rem;
+    }
+
+    /* Mobile bottom nav */
+    .mobile-nav {
+      display: flex;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 64px;
+      background: rgba(0,9,26,0.97);
+      border-top: 2px solid var(--orange);
+      z-index: 100;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 -4px 28px rgba(0,0,0,0.55);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .mobile-nav::-webkit-scrollbar { display: none; }
+
+    .mobile-nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      min-width: 46px;
+      gap: 0.1rem;
+      padding: 0.25rem 0.1rem;
+      cursor: pointer;
+      border-top: 2px solid transparent;
+      transition: all 0.15s;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      position: relative;
+    }
+    .mobile-nav-item.active {
+      border-top-color: var(--orange);
+      background: rgba(255,89,16,0.1);
+    }
+    .mob-icon {
+      font-size: 1.15rem;
+      line-height: 1;
+    }
+    .mob-label {
+      font-family: 'Oswald', sans-serif;
+      font-size: 0.42rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .mobile-nav-item.active .mob-label { color: var(--orange); }
+
+    .mob-badge {
+      position: absolute;
+      top: 3px; right: 6px;
+      background: var(--orange);
+      color: white;
+      border-radius: 50%;
+      width: 13px; height: 13px;
+      font-size: 0.38rem;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'DM Mono', monospace;
+      line-height: 1;
+    }
   }
 `;
+
 
 export default CSS;
