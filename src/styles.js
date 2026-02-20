@@ -601,6 +601,86 @@ const CSS = `
   /* ── MOBILE NAV (bottom tab bar, hidden on desktop) ─────────────────────── */
   .mobile-nav { display: none; }
 
+  /* ── PLAYER FLIP CARDS ──────────────────────────────────────────────────── */
+  .player-flip-wrap {
+    perspective: 900px;
+    cursor: pointer;
+  }
+
+  .player-flip-inner {
+    position: relative;
+    min-height: 200px;
+    transform-style: preserve-3d;
+    transition: transform 0.42s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .player-flip-inner.flipped { transform: rotateY(180deg); }
+
+  .player-flip-front,
+  .player-flip-back {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    border-radius: 8px;
+    padding: 1rem;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .player-flip-front {
+    background: var(--card);
+    border: 1px solid var(--border);
+    transition: border-color 0.2s;
+  }
+  .player-flip-wrap:hover .player-flip-front { border-color: var(--blue2); }
+  .player-flip-back {
+    background: var(--card2);
+    border: 1px solid var(--border2);
+    transform: rotateY(180deg);
+  }
+  .player-flip-hint {
+    margin-top: auto;
+    padding-top: 0.5rem;
+    font-size: 0.44rem;
+    color: var(--muted);
+    font-family: 'Oswald', sans-serif;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: right;
+    opacity: 0.7;
+  }
+
+  /* ── PROMO EXPAND ROW (ScheduleView inline drill-down) ───────────────────── */
+  .promo-expand-row td {
+    padding: 0 !important;
+    background: rgba(0,19,51,0.7);
+    border-left: 3px solid var(--orange);
+  }
+  .promo-expand-panel {
+    padding: 1rem 1.25rem 1.25rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    animation: slideDown 0.18s ease;
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .expand-tile {
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 0.65rem 0.85rem;
+  }
+  .expand-tile-label {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.5rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.3rem;
+  }
+
   /* ── RESPONSIVE ─────────────────────────────────────────────────────────── */
   @media (max-width: 768px) {
     /* Header */
@@ -614,9 +694,9 @@ const CSS = `
     /* Sidebar → hidden; bottom nav takes over */
     .sidebar { display: none; }
 
-    /* Layout: make room for fixed bottom nav */
+    /* Layout: make room for fixed bottom nav + iPhone home bar */
     .layout { /* flex already set */ }
-    .main   { padding: 0.9rem 0.875rem 80px; }
+    .main   { padding: 0.9rem 0.875rem calc(80px + env(safe-area-inset-bottom, 0px)); }
 
     /* Typography */
     .page-title { font-size: 1.8rem; }
@@ -650,6 +730,9 @@ const CSS = `
     .form-row   { grid-template-columns: 1fr; }
     .form-row-3 { grid-template-columns: 1fr; }
 
+    /* Promo expand panel → single column on mobile */
+    .promo-expand-panel { grid-template-columns: 1fr; gap: 0.75rem; }
+
     /* Touch targets */
     .btn     { min-height: 44px; }
     .btn-sm  { min-height: 36px; }
@@ -664,14 +747,15 @@ const CSS = `
       gap: 0.5rem;
     }
 
-    /* Mobile bottom nav */
+    /* Mobile bottom nav — height expands to absorb iPhone home indicator */
     .mobile-nav {
       display: flex;
       position: fixed;
       bottom: 0;
       left: 0;
       right: 0;
-      height: 64px;
+      height: calc(64px + env(safe-area-inset-bottom, 0px));
+      padding-bottom: env(safe-area-inset-bottom, 0px);
       background: rgba(0,9,26,0.97);
       border-top: 2px solid var(--orange);
       z-index: 100;

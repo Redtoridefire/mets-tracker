@@ -6,6 +6,7 @@ import {
   getProfiles, createProfile, deleteProfile,
   getActiveProfileId, setActiveProfileId,
   getUserData, patchUserData,
+  exportProfileData, importProfileData,
 } from './storage.js';
 import OverviewView from './views/OverviewView.jsx';
 import LiveScoresView from './views/LiveScoresView.jsx';
@@ -98,6 +99,7 @@ function ProfileScreen({ onSelect }) {
                 value={name}
                 onChange={e => setName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && create()}
+                maxLength={40}
                 autoFocus
               />
             </div>
@@ -183,15 +185,15 @@ function GameModal({ game, record, onSave, onClose }) {
         <div className="form-row-3">
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>Section</label>
-            <input placeholder="e.g. 105" value={form.section} onChange={e => set('section', e.target.value)} />
+            <input placeholder="e.g. 105" value={form.section} onChange={e => set('section', e.target.value)} maxLength={10} />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>Row</label>
-            <input placeholder="e.g. 14" value={form.row} onChange={e => set('row', e.target.value)} />
+            <input placeholder="e.g. 14" value={form.row} onChange={e => set('row', e.target.value)} maxLength={10} />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>Seat #</label>
-            <input placeholder="e.g. 7" value={form.seat} onChange={e => set('seat', e.target.value)} />
+            <input placeholder="e.g. 7" value={form.seat} onChange={e => set('seat', e.target.value)} maxLength={10} />
           </div>
         </div>
 
@@ -220,16 +222,16 @@ function GameModal({ game, record, onSave, onClose }) {
         <div className="form-row">
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>Who'd You Go With?</label>
-            <input placeholder="e.g. Mike, Sarah, Tony" value={form.who} onChange={e => set('who', e.target.value)} />
+            <input placeholder="e.g. Mike, Sarah, Tony" value={form.who} onChange={e => set('who', e.target.value)} maxLength={200} />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>Food / Drinks Ordered</label>
-            <input placeholder="e.g. Eggroll, Shake Shack, Modelos" value={form.food} onChange={e => set('food', e.target.value)} />
+            <input placeholder="e.g. Eggroll, Shake Shack, Modelos" value={form.food} onChange={e => set('food', e.target.value)} maxLength={200} />
           </div>
         </div>
         <div className="form-group">
           <label>💬 Notes / Memories</label>
-          <textarea placeholder="How was the vibe? Any highlights? Walk-off? Crazy fan moment?" value={form.notes} onChange={e => set('notes', e.target.value)} />
+          <textarea placeholder="How was the vibe? Any highlights? Walk-off? Crazy fan moment?" value={form.notes} onChange={e => set('notes', e.target.value)} maxLength={1000} />
         </div>
 
         <div className="modal-footer">
@@ -243,7 +245,41 @@ function GameModal({ game, record, onSave, onClose }) {
 
 // ─── PROFILE SWITCHER MODAL ───────────────────────────────────────────────────
 function ProfileSwitcherModal({ currentId, onSwitch, onClose }) {
-  const profiles = getProfiles();
+  const [profiles,  setProfiles]  = useState(getProfiles);
+  const [importMsg, setImportMsg] = useState(null);
+
+  const handleExport = () => {
+    try {
+      const json = exportProfileData(currentId);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `mets-hq-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setImportMsg({ ok: false, text: e.message });
+    }
+  };
+
+  const handleImport = e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const newProfile = importProfileData(ev.target.result);
+        setImportMsg({ ok: true, text: `Imported "${newProfile.name}" successfully!` });
+        setProfiles(getProfiles());
+      } catch (err) {
+        setImportMsg({ ok: false, text: err.message });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   return (
     <div className="overlay" onClick={onClose}>
       <div className="modal" style={{ width: 380 }} onClick={e => e.stopPropagation()}>
@@ -262,9 +298,34 @@ function ProfileSwitcherModal({ currentId, onSwitch, onClose }) {
             </div>
           ))}
         </div>
-        <button className="btn btn-outline" style={{ width: '100%' }} onClick={() => { onClose(); /* trigger re-render to show full profile screen */ onSwitch(null); }}>
+        <button className="btn btn-outline" style={{ width: '100%' }} onClick={() => { onClose(); onSwitch(null); }}>
           + Add New Profile
         </button>
+
+        {/* ── Data Management ── */}
+        <div style={{ borderTop: '1px solid var(--border)', marginTop: '1rem', paddingTop: '1rem' }}>
+          <div style={{ fontSize: '0.55rem', color: 'var(--muted)', fontFamily: 'Oswald', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: '0.6rem' }}>
+            Data Management
+          </div>
+          {importMsg && (
+            <div style={{ marginBottom: '0.6rem', padding: '0.5rem 0.75rem', borderRadius: 6, background: importMsg.ok ? 'rgba(0,200,0,0.08)' : 'rgba(255,68,68,0.08)', border: `1px solid ${importMsg.ok ? 'rgba(0,200,0,0.2)' : 'rgba(255,68,68,0.2)'}`, fontSize: '0.65rem', color: importMsg.ok ? 'var(--win)' : 'var(--loss)' }}>
+              {importMsg.ok ? '✓ ' : '⚠️ '}{importMsg.text}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button className="btn btn-outline btn-sm" style={{ flex: 1 }} onClick={handleExport}>
+              ⬇ Export Backup
+            </button>
+            <label className="btn btn-outline btn-sm" style={{ flex: 1, cursor: 'pointer', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              ⬆ Import Backup
+              <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
+            </label>
+          </div>
+          <div style={{ marginTop: '0.5rem', fontSize: '0.55rem', color: 'var(--muted)', lineHeight: 1.5 }}>
+            Export saves your game log to a JSON file. Import restores a backup as a new profile.
+          </div>
+        </div>
+
         <div className="modal-footer" style={{ paddingTop: '0.75rem', marginTop: '0.75rem' }}>
           <button className="btn btn-ghost" onClick={onClose}>Close</button>
         </div>

@@ -5,12 +5,15 @@ import { PROMOS, EGGROLL_TEAMS } from '../data/promos.js';
 export function ScheduleView({ userData, onEditGame }) {
   const { gameRecords = {} } = userData;
   const today = new Date().toISOString().slice(0, 10);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const toggleExpand = id => setExpandedId(prev => prev === id ? null : id);
 
   return (
     <>
       <div className="page-hdr">
         <div className="page-title">📅 2026 Promo Schedule</div>
-        <div className="page-sub">All 20 Promotional Games · Citi Field</div>
+        <div className="page-sub">All 20 Promotional Games · Tap any row for details · Citi Field</div>
       </div>
       <div className="card">
         <div className="tbl-wrap">
@@ -22,12 +25,17 @@ export function ScheduleView({ userData, onEditGame }) {
               </tr>
             </thead>
             <tbody>
-              {PROMOS.map(p => {
+              {PROMOS.flatMap(p => {
                 const rec  = gameRecords[p.id] || {};
                 const past = p.isoDate < today;
                 const is86 = p.promo.includes('1986') || [4,6,8,20].includes(p.id);
-                return (
-                  <tr key={p.id} className={rec.attended ? 'attended' : ''}>
+                const isExpanded = expandedId === p.id;
+
+                const mainRow = (
+                  <tr key={p.id}
+                    className={`${rec.attended ? 'attended' : ''}`}
+                    onClick={() => toggleExpand(p.id)}
+                    style={{ cursor: 'pointer', outline: isExpanded ? '1px solid rgba(255,89,16,0.35)' : 'none' }}>
                     <td style={{ color: 'var(--muted)', fontSize: '0.68rem', fontFamily: 'DM Mono' }}>{String(p.id).padStart(2,'0')}</td>
                     <td>
                       <div style={{ fontFamily: 'Oswald', fontSize: '0.82rem', color: past ? 'var(--muted)' : 'var(--text)', letterSpacing: '0.04em' }}>
@@ -67,12 +75,120 @@ export function ScheduleView({ userData, onEditGame }) {
                       )}
                     </td>
                     <td>
-                      <button className="btn btn-outline btn-sm" onClick={() => onEditGame(p)}>
+                      <button className="btn btn-outline btn-sm" onClick={e => { e.stopPropagation(); onEditGame(p); }}>
                         {rec.attended ? '✏️ Edit' : '+ Log'}
                       </button>
                     </td>
                   </tr>
                 );
+
+                if (!isExpanded) return [mainRow];
+
+                const expandRow = (
+                  <tr key={`${p.id}-expand`} className="promo-expand-row">
+                    <td colSpan={9}>
+                      <div className="promo-expand-panel">
+
+                        {/* ── Promo Info ── */}
+                        <div>
+                          <div style={{ fontFamily: 'Oswald', fontSize: '0.6rem', letterSpacing: '0.18em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '0.6rem' }}>
+                            Promo Details
+                          </div>
+                          <div style={{ fontSize: '1.6rem', marginBottom: '0.35rem' }}>{p.icon}</div>
+                          <div style={{ fontFamily: 'Oswald', fontSize: '0.9rem', color: 'var(--orange)', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>
+                            {p.promo.split(' (')[0]}
+                          </div>
+                          {p.promo.includes('(') && (
+                            <div style={{ fontSize: '0.65rem', color: 'var(--muted)', marginBottom: '0.4rem' }}>
+                              {p.promo.slice(p.promo.indexOf('('))}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginTop: '0.4rem' }}>
+                            {p.limit && <span className="badge badge-limit">First {p.limit.toLocaleString()}</span>}
+                            {p.specialTicket && <span className="badge badge-special">Special Ticket Required</span>}
+                            {is86 && <span className="tag-86">1986</span>}
+                          </div>
+                          <div style={{ marginTop: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                            <div style={{ fontSize: '0.65rem', color: 'var(--text2)' }}>{p.emoji} vs {p.opponent}</div>
+                            <div style={{ fontSize: '0.62rem', color: 'var(--muted)' }}>📅 {p.display} · ⏰ {p.time}</div>
+                          </div>
+                        </div>
+
+                        {/* ── My Game Record ── */}
+                        <div>
+                          <div style={{ fontFamily: 'Oswald', fontSize: '0.6rem', letterSpacing: '0.18em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '0.6rem' }}>
+                            {rec.attended ? 'My Game Record' : 'Not Yet Logged'}
+                          </div>
+                          {rec.attended ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                {rec.result === 'W' && <span className="badge badge-win" style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem' }}>WIN ✓</span>}
+                                {rec.result === 'L' && <span className="badge badge-loss" style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem' }}>LOSS ✗</span>}
+                                <span className="badge" style={{ fontSize: '0.62rem', background: rec.promoCollected ? 'rgba(0,200,0,0.1)' : 'rgba(255,68,68,0.08)', color: rec.promoCollected ? 'var(--win)' : 'var(--loss)', border: `1px solid ${rec.promoCollected ? 'rgba(0,200,0,0.25)' : 'rgba(255,68,68,0.2)'}` }}>
+                                  {p.icon} {rec.promoCollected ? 'Got Promo' : 'Missed Promo'}
+                                </span>
+                              </div>
+                              {(rec.section || rec.row || rec.seat) && (
+                                <div className="expand-tile">
+                                  <div className="expand-tile-label">📍 Seats</div>
+                                  <div style={{ fontFamily: 'Bebas Neue', fontSize: '1rem', color: 'var(--orange)', letterSpacing: '0.06em' }}>
+                                    §{rec.section || '—'} · Row {rec.row || '—'} · #{rec.seat || '—'}
+                                  </div>
+                                </div>
+                              )}
+                              {rec.totalCost > 0 && (
+                                <div className="expand-tile">
+                                  <div className="expand-tile-label">💰 Total Spent</div>
+                                  <div style={{ fontFamily: 'Bebas Neue', fontSize: '1.1rem', color: 'var(--gold)', letterSpacing: '0.06em' }}>${rec.totalCost}</div>
+                                  <div style={{ fontSize: '0.6rem', color: 'var(--muted)', lineHeight: 1.7, marginTop: '0.2rem' }}>
+                                    {rec.costTickets > 0  && <div>🎟️ Tickets: ${rec.costTickets}</div>}
+                                    {rec.costFood > 0     && <div>🌭 Food: ${rec.costFood}</div>}
+                                    {rec.costParking > 0  && <div>🅿️ Parking: ${rec.costParking}</div>}
+                                    {rec.costMerch > 0    && <div>🛍️ Merch: ${rec.costMerch}</div>}
+                                  </div>
+                                </div>
+                              )}
+                              {rec.who && (
+                                <div className="expand-tile">
+                                  <div className="expand-tile-label">👥 Crew</div>
+                                  <div style={{ fontSize: '0.72rem' }}>{rec.who}</div>
+                                </div>
+                              )}
+                              {rec.food && (
+                                <div className="expand-tile">
+                                  <div className="expand-tile-label">🌭 Food & Drinks</div>
+                                  <div style={{ fontSize: '0.72rem' }}>{rec.food}</div>
+                                </div>
+                              )}
+                              {rec.notes && (
+                                <div style={{ padding: '0.6rem 0.75rem', background: 'var(--surface)', borderRadius: '6px', fontSize: '0.7rem', color: 'var(--text2)', lineHeight: 1.6, borderLeft: '2px solid var(--border2)' }}>
+                                  💬 {rec.notes}
+                                </div>
+                              )}
+                              <button className="btn btn-outline btn-sm" style={{ alignSelf: 'flex-start' }}
+                                onClick={e => { e.stopPropagation(); onEditGame(p); }}>
+                                ✏️ Edit Record
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--muted)', lineHeight: 1.6 }}>
+                                {past ? 'Did you attend this game? Log it to track your history.' : 'Planning to go? Log it after the game to track your attendance, costs, and memories.'}
+                              </div>
+                              <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }}
+                                onClick={e => { e.stopPropagation(); onEditGame(p); }}>
+                                + Log This Game
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    </td>
+                  </tr>
+                );
+
+                return [mainRow, expandRow];
               })}
             </tbody>
           </table>
@@ -296,7 +412,7 @@ export function EggrollView({ userData, onSaveEggroll }) {
             <div className="modal-sub">Eggroll Tasting Notes</div>
             <div className="form-group">
               <label>Eggroll Flavor / Theme</label>
-              <input placeholder='e.g. "Pittsburgh Pierogi Roll"' value={form.flavor || ''} onChange={e => setForm(p => ({...p, flavor: e.target.value}))} />
+              <input placeholder='e.g. "Pittsburgh Pierogi Roll"' value={form.flavor || ''} onChange={e => setForm(p => ({...p, flavor: e.target.value}))} maxLength={100} />
             </div>
             <div className="form-group">
               <label>Rating</label>
@@ -315,7 +431,7 @@ export function EggrollView({ userData, onSaveEggroll }) {
             </div>
             <div className="form-group">
               <label>Tasting Notes</label>
-              <textarea placeholder="Crispy? Greasy? Worth the 20-min line? Spill it." value={form.notes || ''} onChange={e => setForm(p => ({...p, notes: e.target.value}))} />
+              <textarea placeholder="Crispy? Greasy? Worth the 20-min line? Spill it." value={form.notes || ''} onChange={e => setForm(p => ({...p, notes: e.target.value}))} maxLength={500} />
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={() => setEditing(null)}>Cancel</button>

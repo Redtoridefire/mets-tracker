@@ -2,12 +2,46 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover enables safe-area-inset env() vars for iPhone notch/home bar -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Mets HQ — Personal New York Mets fan dashboard and 2026 season tracker" />
+
+    <!-- Mobile / PWA meta -->
+    <meta name="theme-color" content="#00091a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Mets HQ" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Don't leak URL to third-party APIs via Referer header -->
+    <meta name="referrer" content="no-referrer" />
+
+    <!--
+      Content Security Policy
+      • script-src 'self'          — only load scripts from this origin
+      • style-src 'unsafe-inline'  — required: app injects <style> tag at runtime
+      • font-src gstatic.com       — Google Fonts glyphs
+      • connect-src                — only these external APIs can be fetched
+      • img-src data: blob:        — allow base64/blob images (future promo photos)
+      • object-src / base-uri      — block plugins & base-tag hijacking
+      Note: frame-ancestors needs a response header, not meta tag, for full effect.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self';
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src https://fonts.gstatic.com;
+      connect-src https://wttr.in https://statsapi.mlb.com;
+      img-src 'self' data: blob:;
+      object-src 'none';
+      base-uri 'self';
+    " />
+
     <title>Mets HQ 2026 ⚾</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@300;400;500;600;700&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
-    <script type="module" crossorigin src="/assets/index-DKzluwj2.js"></script>
+    <script type="module" crossorigin src="/assets/index-CJQaVga0.js"></script>
   </head>
   <body>
     <div id="root"></div>

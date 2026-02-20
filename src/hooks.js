@@ -1,8 +1,32 @@
 import { useState, useEffect, useRef } from 'react';
 import { METS_TEAM_ID } from './data/promos.js';
 
+// ─── API CACHE HELPER ─────────────────────────────────────────────────────────
+// Checks localStorage before hitting the network. Respects a TTL (ms).
+// Cache keys are prefixed with metsHQ_cache_ to avoid collisions.
+const CACHE_PFX = 'metsHQ_cache_';
+
+function cachedFetch(key, url, ttlMs) {
+  try {
+    const raw = localStorage.getItem(CACHE_PFX + key);
+    if (raw) {
+      const { data, ts } = JSON.parse(raw);
+      if (Date.now() - ts < ttlMs) return Promise.resolve(data);
+    }
+  } catch { /* corrupt cache entry — ignore and re-fetch */ }
+
+  return fetch(url)
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+    .then(data => {
+      try {
+        localStorage.setItem(CACHE_PFX + key, JSON.stringify({ data, ts: Date.now() }));
+      } catch { /* storage full — serve data without caching */ }
+      return data;
+    });
+}
+
 // ─── WEATHER HOOK ────────────────────────────────────────────────────────────
-// Uses wttr.in — free, no key, CORS-safe
+// Uses wttr.in — free, no key, CORS-safe. Cached 10 minutes.
 export function useWeather() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -11,11 +35,10 @@ export function useWeather() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch('https://wttr.in/Flushing+NY?format=j1')
-      .then(r => r.json())
+    cachedFetch('weather', 'https://wttr.in/Flushing+NY?format=j1', 600_000)
       .then(json => {
         if (cancelled) return;
-        const cur = json.current_condition?.[0];
+        const cur  = json.current_condition?.[0];
         const area = json.nearest_area?.[0];
         if (cur) {
           setData({
@@ -31,13 +54,13 @@ export function useWeather() {
             precipMM:    cur.precipMM,
             uvIndex:     cur.uvIndex,
             location:    area ? `${area.areaName?.[0]?.value}, ${area.region?.[0]?.value}` : 'Flushing, NY',
-            forecast:    json.weather?.slice(0,3).map(d => ({
-              date:   d.date,
-              maxF:   d.maxtempF,
-              minF:   d.mintempF,
-              avgF:   d.avgtempF,
-              desc:   d.hourly?.[4]?.weatherDesc?.[0]?.value || '',
-              code:   d.hourly?.[4]?.weatherCode,
+            forecast:    json.weather?.slice(0, 3).map(d => ({
+              date:       d.date,
+              maxF:       d.maxtempF,
+              minF:       d.mintempF,
+              avgF:       d.avgtempF,
+              desc:       d.hourly?.[4]?.weatherDesc?.[0]?.value || '',
+              code:       d.hourly?.[4]?.weatherCode,
               chanceRain: d.hourly?.[4]?.chanceofrain || '0',
             })) || [],
           });
@@ -59,15 +82,16 @@ export function weatherIcon(code) {
   if (c === 113) return '☀️';
   if (c === 116) return '⛅';
   if (c === 119 || c === 122) return '☁️';
-  if ([143,248,260].includes(c)) return '🌫️';
+  if ([143, 248, 260].includes(c)) return '🌫️';
   if ([176,185,263,266,281,284,293,296,299,302,305,308,311,314,317,320,323,326,374,377].includes(c)) return '🌧️';
-  if ([179,182,323,326,329,332,335,338,350,368,371].includes(c)) return '🌨️';
+  if ([179,182,329,332,335,338,350,368,371].includes(c)) return '🌨️';
   if ([200,386,389,392,395].includes(c)) return '⛈️';
   return '🌡️';
 }
 
 // ─── MLB SCHEDULE HOOK ───────────────────────────────────────────────────────
-// Uses MLB Stats API — free, no key, CORS-safe
+// Uses MLB Stats API — free, no key, CORS-safe.
+// Cached 90 seconds (short TTL so live scores stay fresh).
 export function useMLBSchedule() {
   const [games, setGames]     = useState([]);
   const [loading, setLoading] = useState(true);
@@ -77,17 +101,18 @@ export function useMLBSchedule() {
     let cancelled = false;
     setLoading(true);
 
-    const today   = new Date();
-    const start   = new Date(today); start.setDate(start.getDate() - 14);
-    const end     = new Date(today); end.setDate(end.getDate() + 30);
-    const fmt     = d => d.toISOString().slice(0,10);
+    const today = new Date();
+    const start = new Date(today); start.setDate(start.getDate() - 14);
+    const end   = new Date(today); end.setDate(end.getDate() + 30);
+    const fmt   = d => d.toISOString().slice(0, 10);
+    const todayStr = fmt(today);
 
     const url = `https://statsapi.mlb.com/api/v1/schedule?teamId=${METS_TEAM_ID}`
       + `&startDate=${fmt(start)}&endDate=${fmt(end)}&sportId=1`
       + `&hydrate=linescore,decisions,team`;
 
-    fetch(url)
-      .then(r => r.json())
+    // Cache key includes today's date so it busts naturally at midnight
+    cachedFetch(`schedule_${todayStr}`, url, 90_000)
       .then(json => {
         if (cancelled) return;
         const allGames = [];
@@ -110,7 +135,7 @@ export function useMLBSchedule() {
               venue:      g.venue?.name || '',
               inning:     g.linescore?.currentInning,
               inningHalf: g.linescore?.inningHalf,
-              gameType:   g.gameType, // 'R' regular, 'S' spring, 'P' postseason
+              gameType:   g.gameType,
               result:     mets?.isWinner === true ? 'W' : mets?.isWinner === false ? 'L' : null,
               winPitch:   g.decisions?.winner?.fullName,
               losePitch:  g.decisions?.loser?.fullName,
@@ -118,7 +143,7 @@ export function useMLBSchedule() {
             });
           });
         });
-        setGames(allGames.sort((a,b) => new Date(b.date) - new Date(a.date)));
+        setGames(allGames.sort((a, b) => new Date(b.date) - new Date(a.date)));
         setLoading(false);
       })
       .catch(e => {
@@ -132,9 +157,10 @@ export function useMLBSchedule() {
 }
 
 // ─── MLB ROSTER + STATS HOOK ─────────────────────────────────────────────────
+// Roster cached 6h. Individual player stats cached 2h.
 export function useMLBRoster() {
   const [roster,  setRoster]  = useState([]);
-  const [stats,   setStats]   = useState({});    // { playerId: { hitting?, pitching? } }
+  const [stats,   setStats]   = useState({});
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
   const abortRef = useRef(null);
@@ -143,28 +169,25 @@ export function useMLBRoster() {
     let cancelled = false;
     setLoading(true);
 
-    const season = new Date().getFullYear(); // 2026
+    const season = new Date().getFullYear();
 
-    // Try current season first; if empty fall back to 2025
-    const fetchStats = async (playerId, group, season) => {
+    const fetchStats = async (playerId, group, yr) => {
       const url = `https://statsapi.mlb.com/api/v1/people/${playerId}/stats`
-        + `?stats=season&season=${season}&group=${group}&sportId=1`;
-      const r = await fetch(url);
-      const j = await r.json();
+        + `?stats=season&season=${yr}&group=${group}&sportId=1`;
+      const j = await cachedFetch(`pstats_${playerId}_${group}_${yr}`, url, 7_200_000);
       const s = j.stats?.[0]?.splits?.[0]?.stat || null;
       if (!s || Object.keys(s).length === 0) {
-        // try prior year
+        // Fall back to prior season
         const url2 = `https://statsapi.mlb.com/api/v1/people/${playerId}/stats`
-          + `?stats=season&season=${season-1}&group=${group}&sportId=1`;
-        const r2 = await fetch(url2);
-        const j2 = await r2.json();
-        return { stat: j2.stats?.[0]?.splits?.[0]?.stat || null, season: season-1 };
+          + `?stats=season&season=${yr - 1}&group=${group}&sportId=1`;
+        const j2 = await cachedFetch(`pstats_${playerId}_${group}_${yr - 1}`, url2, 7_200_000);
+        return { stat: j2.stats?.[0]?.splits?.[0]?.stat || null, season: yr - 1 };
       }
-      return { stat: s, season };
+      return { stat: s, season: yr };
     };
 
-    fetch(`https://statsapi.mlb.com/api/v1/teams/${METS_TEAM_ID}/roster?rosterType=active&season=${season}`)
-      .then(r => r.json())
+    const rosterUrl = `https://statsapi.mlb.com/api/v1/teams/${METS_TEAM_ID}/roster?rosterType=active&season=${season}`;
+    cachedFetch(`roster_${season}`, rosterUrl, 21_600_000)
       .then(async json => {
         if (cancelled) return;
         const players = (json.roster || []).map(p => ({
@@ -177,9 +200,9 @@ export function useMLBRoster() {
         }));
         setRoster(players);
 
-        // Load stats in parallel (batched to avoid hammering)
+        // Load stats in batches of 5 to avoid hammering the API
         const batches = [];
-        for (let i = 0; i < players.length; i += 5) batches.push(players.slice(i, i+5));
+        for (let i = 0; i < players.length; i += 5) batches.push(players.slice(i, i + 5));
         const allStats = {};
 
         for (const batch of batches) {
@@ -187,13 +210,9 @@ export function useMLBRoster() {
           await Promise.all(batch.map(async p => {
             try {
               const isPitcher = p.posType === 'Pitcher';
-              if (isPitcher) {
-                const { stat, season: s } = await fetchStats(p.id, 'pitching', season);
-                allStats[p.id] = { pitching: stat, season: s };
-              } else {
-                const { stat, season: s } = await fetchStats(p.id, 'hitting', season);
-                allStats[p.id] = { hitting: stat, season: s };
-              }
+              const group = isPitcher ? 'pitching' : 'hitting';
+              const { stat, season: s } = await fetchStats(p.id, group, season);
+              allStats[p.id] = isPitcher ? { pitching: stat, season: s } : { hitting: stat, season: s };
             } catch { allStats[p.id] = {}; }
           }));
           if (!cancelled) setStats({ ...allStats });
@@ -211,6 +230,7 @@ export function useMLBRoster() {
 }
 
 // ─── MLB STANDINGS HOOK ──────────────────────────────────────────────────────
+// Cached 60 minutes.
 export function useMLBStandings() {
   const [standings, setStandings] = useState(null);
   const [loading, setLoading]     = useState(true);
@@ -218,11 +238,10 @@ export function useMLBStandings() {
   useEffect(() => {
     let cancelled = false;
     const season = new Date().getFullYear();
-    fetch(`https://statsapi.mlb.com/api/v1/standings?leagueId=104&season=${season}&standingsTypes=regularSeason`)
-      .then(r => r.json())
+    const url = `https://statsapi.mlb.com/api/v1/standings?leagueId=104&season=${season}&standingsTypes=regularSeason`;
+    cachedFetch(`standings_${season}`, url, 3_600_000)
       .then(json => {
         if (cancelled) return;
-        // Find Mets' division
         let metsDiv = null;
         for (const div of (json.records || [])) {
           const mets = div.teamRecords?.find(t => t.team?.id === METS_TEAM_ID);
