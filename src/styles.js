@@ -926,6 +926,166 @@ const CSS = `
 
   /* ── BADGE PLANNED ───────────────────────────────────────────────────────── */
   .badge-planned { background: rgba(255,89,16,0.08); color: var(--orange2); border: 1px solid rgba(255,89,16,0.25); }
+
+  /* ── SPRING TRAINING CARD ────────────────────────────────────────────────── */
+  .st-card {
+    background: linear-gradient(135deg, rgba(0,45,114,0.18) 0%, rgba(0,80,179,0.08) 60%, rgba(255,89,16,0.04) 100%);
+    border: 1px solid var(--border);
+    border-left: 3px solid #00a550;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+  }
+  .st-header   { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 0.75rem; gap: 1rem; }
+  .st-title    { font-family: 'Bebas Neue', cursive; font-size: 1.4rem; letter-spacing: 0.08em; color: white; line-height: 1; }
+  .st-sub      { font-family: 'Oswald', sans-serif; font-size: 0.55rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-top: 0.15rem; }
+  .st-record   { font-family: 'Bebas Neue', cursive; font-size: 1.6rem; line-height: 1; white-space: nowrap; }
+  .st-feature  { background: rgba(0,0,0,0.25); border-radius: 6px; padding: 0.65rem 0.9rem; margin-top: 0.5rem; }
+  .st-feat-label   { font-family: 'Oswald', sans-serif; font-size: 0.52rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--orange); margin-bottom: 0.25rem; }
+  .st-feat-matchup { font-family: 'Oswald', sans-serif; font-size: 0.88rem; color: var(--text); margin-bottom: 0.2rem; }
+  .st-feat-meta    { font-size: 0.6rem; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+  /* ── SCHEDULE SUB-TABS ───────────────────────────────────────────────────── */
+  .sched-sub-tabs {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 1.25rem;
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 0.3rem;
+    flex-wrap: wrap;
+  }
+  .sst-btn {
+    flex: 1;
+    min-width: 110px;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: transparent;
+    color: var(--muted);
+    text-align: center;
+  }
+  .sst-btn.active  { background: var(--card2); color: var(--orange); border-color: rgba(255,89,16,0.3); }
+  .sst-btn:hover:not(.active) { color: var(--text); }
+  .sst-now { background: var(--orange); color: white; border-radius: 3px; padding: 0.05rem 0.3rem; font-size: 0.45rem; margin-left: 0.35rem; vertical-align: middle; }
+
+  /* ── FULL SCHEDULE ROWS ──────────────────────────────────────────────────── */
+  .full-sched-row {
+    display: grid;
+    grid-template-columns: 160px 1fr 120px 60px 80px;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.45rem 0.6rem;
+    border-radius: 5px;
+    transition: background 0.1s;
+  }
+  .full-sched-row:hover { background: rgba(0,80,179,0.07); }
+  .full-sched-today { background: rgba(255,89,16,0.06) !important; border-left: 2px solid var(--orange); }
+  .full-sched-past  { opacity: 0.55; }
+  .fsr-date    { font-size: 0.68rem; color: var(--muted); font-family: 'DM Mono', monospace; white-space: nowrap; }
+  .fsr-matchup { font-family: 'Oswald', sans-serif; font-size: 0.82rem; }
+  .fsr-venue   { font-size: 0.58rem; color: var(--muted); font-family: 'DM Mono'; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fsr-score   { text-align: center; }
+  .fsr-status  { text-align: right; }
+
+  /* ── AAA TRACKER ─────────────────────────────────────────────────────────── */
+  .aaa-player-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    background: rgba(255,68,68,0.04);
+    border: 1px solid rgba(255,68,68,0.15);
+    border-radius: 6px;
+  }
+  .aaa-arrow     { font-size: 1.1rem; width: 20px; text-align: center; flex-shrink: 0; }
+  .aaa-down      { color: var(--loss); }
+  .aaa-up        { color: var(--win); }
+  .aaa-info      { flex: 1; min-width: 0; }
+  .aaa-name      { font-family: 'Oswald', sans-serif; font-size: 0.85rem; color: var(--text); letter-spacing: 0.05em; }
+  .aaa-meta      { font-size: 0.6rem; color: var(--muted); margin-top: 0.1rem; }
+  .aaa-days      { text-align: center; flex-shrink: 0; }
+  .aaa-days-num  { display: block; font-family: 'Bebas Neue', cursive; font-size: 1.5rem; color: var(--loss); line-height: 1; }
+  .aaa-days-lbl  { font-family: 'Oswald', sans-serif; font-size: 0.45rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); }
+
+  /* Transaction log rows */
+  .txn-row       { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0; border-bottom: 1px solid rgba(0,45,92,0.25); }
+  .txn-row:last-child { border-bottom: none; }
+  .txn-up   .txn-icon { color: var(--win); }
+  .txn-down .txn-icon { color: var(--loss); }
+  .txn-icon  { font-size: 1rem; width: 18px; text-align: center; flex-shrink: 0; }
+  .txn-body  { flex: 1; min-width: 0; }
+  .txn-name  { font-family: 'Oswald', sans-serif; font-size: 0.8rem; color: var(--text); letter-spacing: 0.04em; }
+  .txn-label { font-size: 0.58rem; color: var(--muted); margin-top: 0.05rem; }
+  .txn-right { text-align: right; flex-shrink: 0; }
+  .txn-date  { font-size: 0.62rem; color: var(--text2); font-family: 'DM Mono', monospace; }
+  .txn-ago   { font-size: 0.52rem; color: var(--muted); margin-top: 0.05rem; }
+
+  /* ── METS FEED ───────────────────────────────────────────────────────────── */
+  .feed-layout  { display: grid; grid-template-columns: 1fr 280px; gap: 1.5rem; align-items: start; }
+  .feed-main    { display: flex; flex-direction: column; gap: 0.75rem; }
+  .feed-sidebar { /* sticky is set inline */ }
+
+  .feed-article {
+    display: flex;
+    gap: 0.85rem;
+    align-items: flex-start;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.18s, transform 0.15s;
+  }
+  .feed-article:hover { border-color: var(--border2); transform: translateY(-1px); }
+  .feed-thumb {
+    width: 80px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 5px;
+    flex-shrink: 0;
+    background: var(--surface);
+  }
+  .feed-article-body    { flex: 1; min-width: 0; }
+  .feed-article-title   { font-family: 'Oswald', sans-serif; font-size: 0.85rem; letter-spacing: 0.04em; color: var(--text); line-height: 1.4; margin-bottom: 0.3rem; }
+  .feed-article-desc    { font-size: 0.65rem; color: var(--muted); line-height: 1.5; margin-bottom: 0.3rem; }
+  .feed-article-meta    { font-size: 0.55rem; color: var(--orange); font-family: 'Oswald', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
+
+  .feed-error {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  /* Feed sidebar transaction rows */
+  .feed-txn-row  { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.5rem 0; border-bottom: 1px solid rgba(0,45,92,0.2); }
+  .feed-txn-row:last-child { border-bottom: none; }
+  .feed-txn-up   .feed-txn-icon { color: var(--win); }
+  .feed-txn-down .feed-txn-icon { color: var(--loss); }
+  .feed-txn-icon { font-size: 0.9rem; width: 16px; text-align: center; flex-shrink: 0; padding-top: 0.1rem; }
+  .feed-txn-body { flex: 1; min-width: 0; }
+  .feed-txn-name { font-family: 'Oswald', sans-serif; font-size: 0.75rem; color: var(--text); letter-spacing: 0.04em; }
+  .feed-txn-type { font-size: 0.55rem; color: var(--muted); margin-top: 0.05rem; }
+  .feed-txn-date { font-size: 0.52rem; color: var(--muted); margin-top: 0.08rem; font-family: 'DM Mono', monospace; }
+
+  /* Responsive for feed + schedule + AAA */
+  @media (max-width: 768px) {
+    .feed-layout { grid-template-columns: 1fr; }
+    .feed-sidebar > .card { position: static !important; }
+    .full-sched-row { grid-template-columns: 1fr 1fr; gap: 0.3rem; }
+    .fsr-venue, .fsr-score { display: none; }
+    .sched-sub-tabs { flex-direction: column; }
+    .sst-btn { min-width: unset; }
+    .st-record { font-size: 1.2rem; }
+  }
 `;
 
 

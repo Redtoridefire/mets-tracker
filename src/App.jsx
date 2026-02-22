@@ -11,14 +11,18 @@ import {
 import OverviewView from './views/OverviewView.jsx';
 import LiveScoresView from './views/LiveScoresView.jsx';
 import PlayersView from './views/PlayersView.jsx';
+import AAAView from './views/AAAView.jsx';
+import FeedView from './views/FeedView.jsx';
 import { ScheduleView, MyGamesView, TrophyView, EggrollView, MapView } from './views/OtherViews.jsx';
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 const TABS = [
   { id:'overview',  icon:'🏟️', label:'Home Base',     short:'Home'     },
   { id:'scores',    icon:'🎮', label:'Live Scores',   short:'Scores'   },
+  { id:'feed',      icon:'📰', label:'Mets Feed',     short:'Feed'     },
   { id:'schedule',  icon:'📅', label:'Schedule',      short:'Sched'    },
   { id:'mygames',   icon:'🎟️', label:'My Games',      short:'Games'    },
+  { id:'aaa',       icon:'🔄', label:'AAA Tracker',   short:'AAA'      },
   { id:'players',   icon:'👥', label:'Player Stats',  short:'Players'  },
   { id:'trophy',    icon:'🏆', label:'Trophy Shelf',  short:'Trophy'   },
   { id:'eggroll',   icon:'🥚', label:'Eggroll Log',   short:'Eggroll'  },
@@ -671,8 +675,10 @@ export default function App() {
           <div key={tab} className="view-enter">
             {tab === 'overview'  && <OverviewView    userData={userData} todayGame={todayGame} todayPromo={todayPromo} onLogGame={setEditGame} />}
             {tab === 'scores'    && <LiveScoresView  />}
+            {tab === 'feed'      && <FeedView        />}
             {tab === 'schedule'  && <ScheduleView    userData={userData} onEditGame={setEditGame} />}
             {tab === 'mygames'   && <MyGamesView     userData={userData} onEditGame={setEditGame} />}
+            {tab === 'aaa'       && <AAAView         />}
             {tab === 'players'   && <PlayersView     />}
             {tab === 'trophy'    && <TrophyView      userData={userData} />}
             {tab === 'eggroll'   && <EggrollView     userData={userData} onSaveEggroll={handleSaveEggroll} />}
