@@ -68,6 +68,8 @@ export function ScheduleView({ userData, onEditGame }) {
                           {rec.result === 'W' && <span className="badge badge-win">W</span>}
                           {rec.result === 'L' && <span className="badge badge-loss">L</span>}
                         </div>
+                      ) : rec.planned ? (
+                        <span className="badge badge-planned">🎯 Planned</span>
                       ) : past ? (
                         <span style={{ color: 'var(--muted)', fontSize: '0.62rem' }}>PAST</span>
                       ) : (
@@ -76,7 +78,7 @@ export function ScheduleView({ userData, onEditGame }) {
                     </td>
                     <td>
                       <button className="btn btn-outline btn-sm" onClick={e => { e.stopPropagation(); onEditGame(p); }}>
-                        {rec.attended ? '✏️ Edit' : '+ Log'}
+                        {rec.attended ? '✏️ Edit' : rec.planned ? '🎯 Update' : '+ Log'}
                       </button>
                     </td>
                   </tr>
@@ -117,8 +119,13 @@ export function ScheduleView({ userData, onEditGame }) {
                         {/* ── My Game Record ── */}
                         <div>
                           <div style={{ fontFamily: 'Oswald', fontSize: '0.6rem', letterSpacing: '0.18em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '0.6rem' }}>
-                            {rec.attended ? 'My Game Record' : 'Not Yet Logged'}
+                            {rec.attended ? 'My Game Record' : rec.planned ? '🎯 Planned to Attend' : 'Not Yet Logged'}
                           </div>
+                          {rec.planned && !rec.attended && rec.notes && (
+                            <div style={{ marginBottom: '0.5rem', padding: '0.5rem 0.75rem', background: 'var(--surface)', borderRadius: 6, fontSize: '0.68rem', color: 'var(--text2)', lineHeight: 1.6, borderLeft: '2px solid rgba(255,89,16,0.4)' }}>
+                              💬 {rec.notes}
+                            </div>
+                          )}
                           {rec.attended ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>

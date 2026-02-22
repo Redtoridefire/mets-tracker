@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import CSS from './styles.js';
 import { PROMOS } from './data/promos.js';
 import { useMLBSchedule } from './hooks.js';
@@ -27,6 +27,64 @@ const TABS = [
 
 // ─── AVATAR PICKER ────────────────────────────────────────────────────────────
 const AVATARS = ['⚾','🏟️','🔵','🟠','🧢','🎯','👊','🔥','🦁','🏆'];
+
+// ─── CONFETTI ─────────────────────────────────────────────────────────────────
+function Confetti({ onDone }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx    = canvas.getContext('2d');
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const COLORS  = ['#FF5910','#002D72','#ffffff','#ffcc00','#00e676','#ff9966','#7eb3ff'];
+    const pieces  = Array.from({ length: 120 }, () => ({
+      x:    Math.random() * canvas.width,
+      y:    -10 - Math.random() * 120,
+      vx:   (Math.random() - 0.5) * 5,
+      vy:   Math.random() * 3 + 2.5,
+      w:    Math.random() * 10 + 4,
+      h:    Math.random() * 5 + 3,
+      color:COLORS[Math.floor(Math.random() * COLORS.length)],
+      rot:  Math.random() * 360,
+      rotV: (Math.random() - 0.5) * 8,
+    }));
+    let running = true, raf;
+    const tick = () => {
+      if (!running) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      let active = false;
+      for (const p of pieces) {
+        if (p.y < canvas.height + 20) active = true;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate((p.rot * Math.PI) / 180);
+        ctx.globalAlpha = Math.max(0, 1 - (p.y / canvas.height) * 0.8);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+        p.x += p.vx; p.y += p.vy; p.vy += 0.08; p.rot += p.rotV;
+      }
+      if (!active) { running = false; onDone(); return; }
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => { running = false; cancelAnimationFrame(raf); };
+  }, [onDone]);
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 9999 }} />;
+}
+
+// ─── TOAST CONTAINER ──────────────────────────────────────────────────────────
+function ToastContainer({ toasts }) {
+  return (
+    <div className="toast-container">
+      {toasts.map(t => (
+        <div key={t.id} className={`toast toast-${t.type}`}>
+          {t.type === 'win' ? '🎉 ' : t.type === 'loss' ? '😔 ' : '✓ '}{t.msg}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ─── PROFILE SCREEN (first launch / switcher) ─────────────────────────────────
 function ProfileScreen({ onSelect }) {
@@ -132,8 +190,11 @@ function ProfileScreen({ onSelect }) {
 
 // ─── GAME LOG MODAL ───────────────────────────────────────────────────────────
 function GameModal({ game, record, onSave, onClose }) {
+  // Plan mode = not yet attended, just flagging intent
+  const [isPlan, setIsPlan] = useState(!!(record?.planned && !record?.attended));
   const [form, setForm] = useState({
-    attended:      true,
+    attended:      false,
+    planned:       false,
     result:        '',
     section:       '',
     row:           '',
@@ -155,13 +216,46 @@ function GameModal({ game, record, onSave, onClose }) {
     .map(v => parseFloat(v) || 0)
     .reduce((a, b) => a + b, 0);
 
-  const save = () => onSave({ ...form, attended: true, totalCost: parseFloat(totalCost.toFixed(2)) });
+  const save = () => {
+    if (isPlan) {
+      onSave({ planned: true, attended: false, notes: form.notes });
+    } else {
+      onSave({ ...form, attended: true, planned: false, totalCost: parseFloat(totalCost.toFixed(2)) });
+    }
+  };
 
   return (
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-title">{game.emoji} vs {game.opponent}</div>
         <div className="modal-sub">{game.display} · {game.time} · {game.icon} {game.promo}</div>
+
+        {/* ── Mode toggle ── */}
+        <div className="plan-toggle">
+          <button className={`plan-toggle-btn ${!isPlan ? 'active' : ''}`} onClick={() => setIsPlan(false)}>
+            ✓ I Attended
+          </button>
+          <button className={`plan-toggle-btn ${isPlan ? 'active' : ''}`} onClick={() => setIsPlan(true)}>
+            🎯 Planning to Go
+          </button>
+        </div>
+
+        {isPlan ? (
+          <>
+            <div style={{ background: 'rgba(255,89,16,0.06)', border: '1px solid rgba(255,89,16,0.2)', borderRadius: 6, padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.68rem', color: 'var(--text2)', lineHeight: 1.6 }}>
+              Mark this game as planned. Come back after attending to fill in your full game log!
+            </div>
+            <div className="form-group">
+              <label>Pre-Game Notes (optional)</label>
+              <textarea placeholder="Who are you going with? What are you excited about?" value={form.notes} onChange={e => set('notes', e.target.value)} maxLength={500} style={{ minHeight: 60 }} />
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={onClose}>Cancel</button>
+              <button className="btn btn-primary" onClick={save}>🎯 Mark as Planned</button>
+            </div>
+          </>
+        ) : (
+        <>
 
         <div className="form-row">
           <div className="form-group" style={{ marginBottom: 0 }}>
@@ -238,6 +332,8 @@ function GameModal({ game, record, onSave, onClose }) {
           <button className="btn btn-outline" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={save}>✓ Save Game Log</button>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
@@ -444,10 +540,40 @@ function GameDayBanner({ todayGame, todayPromo, onLogGame }) {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [profileId,  setProfileId]  = useState(() => getActiveProfileId());
-  const [tab,        setTab]        = useState('overview');
-  const [userData,   setUserData]   = useState(() => getUserData(getActiveProfileId()));
-  const [editGame,   setEditGame]   = useState(null);
+  const [profileId,        setProfileId]        = useState(() => getActiveProfileId());
+  const [tab,              setTab]              = useState('overview');
+  const [userData,         setUserData]         = useState(() => getUserData(getActiveProfileId()));
+  const [editGame,         setEditGame]         = useState(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [toasts,           setToasts]           = useState([]);
+  const [showConfetti,     setShowConfetti]     = useState(false);
+
+  const addToast = useCallback((msg, type = 'save') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, msg, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3100);
+  }, []);
+
+  // Swipe navigation refs
+  const swipeX = useRef(null);
+  const swipeY = useRef(null);
+  const onTouchStart = useCallback(e => {
+    swipeX.current = e.touches[0].clientX;
+    swipeY.current = e.touches[0].clientY;
+  }, []);
+  const onTouchEnd = useCallback(e => {
+    if (swipeX.current === null) return;
+    const dx = e.changedTouches[0].clientX - swipeX.current;
+    const dy = e.changedTouches[0].clientY - swipeY.current;
+    swipeX.current = null; swipeY.current = null;
+    if (Math.abs(dx) < 48 || Math.abs(dy) > Math.abs(dx) * 0.75) return;
+    setTab(cur => {
+      const idx = TABS.findIndex(t => t.id === cur);
+      if (dx < 0 && idx < TABS.length - 1) return TABS[idx + 1].id;
+      if (dx > 0 && idx > 0) return TABS[idx - 1].id;
+      return cur;
+    });
+  }, []);
 
   const profile = useMemo(() => getProfiles().find(p => p.id === profileId) || null, [profileId]);
 
@@ -464,7 +590,7 @@ export default function App() {
 
   const handleSwitchProfile = (id) => {
     if (!id) {
-      setProfileId(null); // force profile screen
+      setProfileId(null);
     } else {
       setProfileId(id);
       setActiveProfileId(id);
@@ -473,10 +599,20 @@ export default function App() {
 
   const handleSaveGame = (form) => {
     const next = patchUserData(profileId, {
-      gameRecords: { ...userData.gameRecords, [editGame.id]: { ...form, attended: true } }
+      gameRecords: { ...userData.gameRecords, [editGame.id]: form }
     });
     setUserData(next);
     setEditGame(null);
+    if (form.planned && !form.attended) {
+      addToast(`${editGame.emoji} ${editGame.opponent} — marked as planned!`, 'save');
+    } else if (form.result === 'W') {
+      addToast("Let's Go Mets! ⚾ Game saved!", 'win');
+      setShowConfetti(true);
+    } else if (form.result === 'L') {
+      addToast('Tough one. Game logged.', 'loss');
+    } else {
+      addToast('Game log saved!', 'save');
+    }
   };
 
   const handleSaveEggroll = (teamName, data) => {
@@ -502,6 +638,9 @@ export default function App() {
   return (
     <>
       <style>{CSS}</style>
+      {showConfetti && <Confetti onDone={() => setShowConfetti(false)} />}
+      <ToastContainer toasts={toasts} />
+
       <Header profile={profile} userData={userData} onSwitchProfile={handleSwitchProfile} />
 
       {todayGame && (
@@ -512,28 +651,33 @@ export default function App() {
         />
       )}
 
-      <div className="layout">
-        <nav className="sidebar">
-          <div className="nav-sec">Navigation</div>
+      <div className="layout" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <nav className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+          <button className="sidebar-collapse-btn" onClick={() => setSidebarCollapsed(c => !c)} title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            {sidebarCollapsed ? '›' : '‹'}
+          </button>
+          {!sidebarCollapsed && <div className="nav-sec">Navigation</div>}
           {TABS.map(t => (
-            <div key={t.id} className={`nav-item ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+            <div key={t.id} className={`nav-item ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)} title={sidebarCollapsed ? t.label : undefined}>
               <span className="nav-icon">{t.icon}</span>
-              {t.label}
-              {t.id === 'mygames'   && attended > 0         && <span className="nav-badge">{attended}</span>}
-              {t.id === 'trophy'    && promoCollected > 0    && <span className="nav-badge">{promoCollected}</span>}
+              {!sidebarCollapsed && t.label}
+              {!sidebarCollapsed && t.id === 'mygames'  && attended > 0       && <span className="nav-badge">{attended}</span>}
+              {!sidebarCollapsed && t.id === 'trophy'   && promoCollected > 0  && <span className="nav-badge">{promoCollected}</span>}
             </div>
           ))}
         </nav>
 
         <main className="main">
-          {tab === 'overview'  && <OverviewView    userData={userData} todayGame={todayGame} todayPromo={todayPromo} onLogGame={setEditGame} />}
-          {tab === 'scores'    && <LiveScoresView  />}
-          {tab === 'schedule'  && <ScheduleView    userData={userData} onEditGame={setEditGame} />}
-          {tab === 'mygames'   && <MyGamesView     userData={userData} onEditGame={setEditGame} />}
-          {tab === 'players'   && <PlayersView     />}
-          {tab === 'trophy'    && <TrophyView      userData={userData} />}
-          {tab === 'eggroll'   && <EggrollView     userData={userData} onSaveEggroll={handleSaveEggroll} />}
-          {tab === 'map'       && <MapView         userData={userData} />}
+          <div key={tab} className="view-enter">
+            {tab === 'overview'  && <OverviewView    userData={userData} todayGame={todayGame} todayPromo={todayPromo} onLogGame={setEditGame} />}
+            {tab === 'scores'    && <LiveScoresView  />}
+            {tab === 'schedule'  && <ScheduleView    userData={userData} onEditGame={setEditGame} />}
+            {tab === 'mygames'   && <MyGamesView     userData={userData} onEditGame={setEditGame} />}
+            {tab === 'players'   && <PlayersView     />}
+            {tab === 'trophy'    && <TrophyView      userData={userData} />}
+            {tab === 'eggroll'   && <EggrollView     userData={userData} onSaveEggroll={handleSaveEggroll} />}
+            {tab === 'map'       && <MapView         userData={userData} />}
+          </div>
         </main>
       </div>
 
