@@ -812,7 +812,120 @@ const CSS = `
       font-family: 'DM Mono', monospace;
       line-height: 1;
     }
+
+    /* Toast moves to bottom on mobile (above nav bar) */
+    .toast-container {
+      top: auto;
+      bottom: calc(80px + env(safe-area-inset-bottom, 0px) + 0.75rem);
+      right: 1rem;
+      left: 1rem;
+      align-items: flex-end;
+    }
   }
+
+  /* ── TOAST NOTIFICATIONS ─────────────────────────────────────────────────── */
+  .toast-container {
+    position: fixed;
+    top: 80px;
+    right: 1.5rem;
+    z-index: 9000;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    pointer-events: none;
+  }
+  .toast {
+    background: var(--card2);
+    border: 1px solid var(--border2);
+    border-left: 3px solid var(--border2);
+    border-radius: 8px;
+    padding: 0.7rem 1.2rem;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    color: var(--text);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+    animation: toastIn 0.25s ease, toastOut 0.25s ease 2.75s forwards;
+    white-space: nowrap;
+  }
+  .toast-win  { border-left-color: var(--win);    color: var(--win);    background: rgba(0,230,118,0.07); }
+  .toast-loss { border-left-color: var(--loss);   color: var(--loss);   background: rgba(255,68,68,0.07); }
+  .toast-save { border-left-color: var(--orange); }
+  @keyframes toastIn  { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes toastOut { from { opacity: 1; transform: translateX(0); }   to { opacity: 0; transform: translateX(24px); } }
+
+  /* ── VIEW ENTER ANIMATION ────────────────────────────────────────────────── */
+  @keyframes viewEnter {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .view-enter { animation: viewEnter 0.2s ease; }
+
+  /* ── SIDEBAR COLLAPSE ────────────────────────────────────────────────────── */
+  .sidebar { transition: width 0.2s ease; }
+  .sidebar.collapsed { width: 52px; padding-left: 0; padding-right: 0; overflow: hidden; }
+  .sidebar.collapsed .nav-sec { display: none; }
+  .sidebar.collapsed .nav-item { padding: 0.7rem; justify-content: center; }
+  .sidebar.collapsed .nav-item > *:not(.nav-icon),
+  .sidebar.collapsed .nav-badge { display: none; }
+  .sidebar-collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin: 0 auto 0.5rem;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: var(--muted);
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .sidebar-collapse-btn:hover { color: var(--orange); border-color: rgba(255,89,16,0.5); }
+
+  /* ── PROMO CHIP STRIP ────────────────────────────────────────────────────── */
+  .promo-strip-wrap { overflow-x: auto; margin-bottom: 1.5rem; scrollbar-width: none; }
+  .promo-strip-wrap::-webkit-scrollbar { display: none; }
+  .promo-strip { display: flex; gap: 0.75rem; padding-bottom: 0.25rem; }
+  .promo-chip {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 0.9rem;
+    text-align: center;
+    min-width: 82px;
+    flex-shrink: 0;
+    transition: border-color 0.18s, transform 0.15s;
+  }
+  .promo-chip:hover { border-color: rgba(255,89,16,0.4); transform: translateY(-2px); }
+  .promo-chip-icon { font-size: 1.5rem; line-height: 1; }
+  .promo-chip-days { font-family: 'Bebas Neue', cursive; font-size: 1.05rem; color: var(--orange); line-height: 1; margin: 0.2rem 0 0.1rem; letter-spacing: 0.04em; }
+  .promo-chip-opp  { font-family: 'Oswald', sans-serif; font-size: 0.52rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .promo-chip-date { font-size: 0.46rem; color: var(--border2); margin-top: 0.1rem; font-family: 'DM Mono', monospace; }
+
+  /* ── PLAN MODE TOGGLE ────────────────────────────────────────────────────── */
+  .plan-toggle { display: flex; gap: 0.4rem; margin-bottom: 1.25rem; background: var(--surface); border-radius: 7px; padding: 0.25rem; }
+  .plan-toggle-btn {
+    flex: 1;
+    padding: 0.5rem;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: transparent;
+    color: var(--muted);
+  }
+  .plan-toggle-btn.active { background: var(--card2); color: var(--orange); border-color: rgba(255,89,16,0.3); }
+
+  /* ── BADGE PLANNED ───────────────────────────────────────────────────────── */
+  .badge-planned { background: rgba(255,89,16,0.08); color: var(--orange2); border: 1px solid rgba(255,89,16,0.25); }
 `;
 
 

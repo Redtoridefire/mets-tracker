@@ -280,14 +280,24 @@ export default function OverviewView({ userData, todayGame, todayPromo, onLogGam
   const today = new Date().toISOString().slice(0, 10);
 
   const attended       = Object.values(gameRecords).filter(r => r?.attended).length;
+  const planned        = Object.values(gameRecords).filter(r => r?.planned && !r?.attended).length;
   const promoCollected = Object.values(gameRecords).filter(r => r?.promoCollected).length;
   const wins           = Object.values(gameRecords).filter(r => r?.result === 'W').length;
   const losses         = Object.values(gameRecords).filter(r => r?.result === 'L').length;
   const eggrollCount   = Object.values(eggrollLog).filter(r => r?.logged).length;
   const totalSpent     = Object.values(gameRecords).reduce((sum, r) => sum + (r?.totalCost || 0), 0);
 
-  const nextGame = PROMOS.find(p => p.isoDate >= today && !gameRecords[p.id]?.attended) || null;
+  const nextGame  = PROMOS.find(p => p.isoDate >= today && !gameRecords[p.id]?.attended) || null;
   const countdown = nextGame ? getCountdown(nextGame.isoDate) : null;
+
+  // Upcoming promo chips (next N unattended future games)
+  const upcomingChips = PROMOS.filter(p => p.isoDate >= today && !gameRecords[p.id]?.attended);
+
+  // Good-luck charm stat
+  const recordedGames = Object.values(gameRecords).filter(r => r?.attended && r?.result);
+  const charmRate = recordedGames.length > 0
+    ? `${wins}‑${losses}`
+    : null;
 
   return (
     <>
@@ -313,6 +323,18 @@ export default function OverviewView({ userData, todayGame, todayPromo, onLogGam
           </div>
           <div className="lbl">Your W-L</div>
         </div>
+        {charmRate ? (
+          <div className="stat-card" style={{ borderColor: wins > losses ? 'rgba(0,230,118,0.3)' : undefined }}>
+            <div className="big" style={{ fontSize: '1.6rem', color: wins > losses ? 'var(--win)' : wins < losses ? 'var(--loss)' : 'var(--orange)' }}>
+              {wins > losses ? '🍀' : wins < losses ? '😬' : '⚖️'}
+            </div>
+            <div className="lbl" style={{ fontSize: '0.48rem', lineHeight: 1.4 }}>
+              Mets {charmRate} when you're there
+            </div>
+          </div>
+        ) : (
+          <div className="stat-card"><div className="big">{planned > 0 ? planned : '—'}</div><div className="lbl">{planned > 0 ? 'Games Planned' : 'Charm TBD'}</div></div>
+        )}
         <div className="stat-card"><div className="big">{eggrollCount}</div><div className="lbl">Eggrolls Tried</div></div>
         <div className="stat-card">
           <div className="big" style={{ color: 'var(--gold)', fontSize: '2rem' }}>${totalSpent.toFixed(0)}</div>
@@ -320,6 +342,27 @@ export default function OverviewView({ userData, todayGame, todayPromo, onLogGam
         </div>
         <div className="stat-card"><div className="big">{20 - attended}</div><div className="lbl">Promos Left</div></div>
       </div>
+
+      {/* ── Upcoming promo chip strip ── */}
+      {upcomingChips.length > 0 && (
+        <div className="promo-strip-wrap">
+          <div className="promo-strip">
+            {upcomingChips.map(p => {
+              const daysLeft = Math.ceil((new Date(p.isoDate + 'T00:00:00') - new Date()) / 86400000);
+              return (
+                <div key={p.id} className="promo-chip">
+                  <div className="promo-chip-icon">{p.icon}</div>
+                  <div className="promo-chip-days">
+                    {daysLeft <= 0 ? 'TODAY' : daysLeft === 1 ? 'TMW' : `${daysLeft}d`}
+                  </div>
+                  <div className="promo-chip-opp">{p.oppShort || p.opponent.split(' ').pop()}</div>
+                  <div className="promo-chip-date">{p.display}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {nextGame && countdown && (
         <div className="card" style={{ marginBottom: '1.5rem', borderColor: 'rgba(255,89,16,0.3)', background: 'linear-gradient(135deg, var(--card), rgba(255,89,16,0.04))' }}>
