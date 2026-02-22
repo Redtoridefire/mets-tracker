@@ -1,6 +1,82 @@
 import { useState, useEffect } from 'react';
-import { useWeather, weatherIcon, useMLBSchedule, useMLBStandings } from '../hooks.js';
+import { useWeather, weatherIcon, useMLBSchedule, useMLBStandings, useMLBFullSchedule } from '../hooks.js';
 import { PROMOS } from '../data/promos.js';
+
+// ─── SPRING TRAINING CARD ─────────────────────────────────────────────────────
+function SpringTrainingCard() {
+  const { games, loading } = useMLBFullSchedule();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const stGames = games.filter(g => g.gameType === 'S');
+  if (!loading && stGames.length === 0) return null;
+
+  const played  = stGames.filter(g => g.result);
+  const stWins  = played.filter(g => g.result === 'W').length;
+  const stLoss  = played.filter(g => g.result === 'L').length;
+  const nextST  = stGames.find(g => g.displayDate >= today && !g.result);
+  const liveST  = stGames.find(g => g.statusCode === 'I');
+  const feature = liveST || nextST || played.at(-1);
+  const last5   = played.slice(-5);
+
+  if (loading) return (
+    <div className="st-card" style={{ marginBottom: '1.5rem' }}>
+      <div className="loading-shimmer" style={{ height: 80 }} />
+    </div>
+  );
+
+  return (
+    <div className="st-card" style={{ marginBottom: '1.5rem' }}>
+      <div className="st-header">
+        <div>
+          <div className="st-title">🌴 Spring Training 2026</div>
+          <div className="st-sub">Clover Park · Port St. Lucie, FL</div>
+        </div>
+        <div className="st-record">
+          <span style={{ color: 'var(--win)' }}>{stWins}W</span>
+          <span style={{ color: 'var(--muted)', margin: '0 0.2rem' }}>–</span>
+          <span style={{ color: 'var(--loss)' }}>{stLoss}L</span>
+        </div>
+      </div>
+
+      {/* Mini W/L trail */}
+      {last5.length > 0 && (
+        <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.52rem', color: 'var(--muted)', fontFamily: 'Oswald', letterSpacing: '0.12em', textTransform: 'uppercase', marginRight: '0.2rem', alignSelf: 'center' }}>Last {last5.length}:</span>
+          {last5.map(g => (
+            <span key={g.gamePk} className={`badge ${g.result === 'W' ? 'badge-win' : 'badge-loss'}`}>
+              {g.result} {g.metsScore}–{g.oppScore}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {feature && (
+        <div className="st-feature">
+          <div className="st-feat-label">
+            {liveST ? '🔴 LIVE NOW' : feature.displayDate === today ? '⚾ TODAY' : feature.result ? '📋 LAST' : '📅 NEXT'}
+          </div>
+          <div className="st-feat-matchup">
+            <span style={{ color: 'var(--muted)', fontSize: '0.65rem' }}>{feature.isHome ? 'vs' : '@'}</span>{' '}
+            <span style={{ fontFamily: 'Oswald', fontSize: '0.88rem' }}>{feature.oppName}</span>
+            {feature.metsScore !== undefined && feature.oppScore !== undefined && (
+              <span style={{ fontFamily: 'Bebas Neue', fontSize: '1.1rem', color: feature.result === 'W' ? 'var(--win)' : feature.result === 'L' ? 'var(--loss)' : 'var(--text)', marginLeft: '0.5rem' }}>
+                {feature.metsScore}–{feature.oppScore}
+              </span>
+            )}
+          </div>
+          <div className="st-feat-meta">
+            {new Date(feature.displayDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            {feature.venue && ` · ${feature.venue.split(',')[0]}`}
+          </div>
+        </div>
+      )}
+
+      <div style={{ fontSize: '0.5rem', color: 'var(--muted)', marginTop: '0.5rem', fontFamily: 'DM Mono' }}>
+        Live data from MLB Stats API · {stGames.length} ST games scheduled
+      </div>
+    </div>
+  );
+}
 
 function getCountdown(isoDate) {
   const diff = new Date(isoDate + 'T00:00:00') - new Date();
@@ -342,6 +418,8 @@ export default function OverviewView({ userData, todayGame, todayPromo, onLogGam
         </div>
         <div className="stat-card"><div className="big">{20 - attended}</div><div className="lbl">Promos Left</div></div>
       </div>
+
+      <SpringTrainingCard />
 
       {/* ── Upcoming promo chip strip ── */}
       {upcomingChips.length > 0 && (

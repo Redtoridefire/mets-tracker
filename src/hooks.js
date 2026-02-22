@@ -256,3 +256,142 @@ export function useMLBStandings() {
 
   return { standings, loading };
 }
+
+// ─── FULL SEASON SCHEDULE HOOK ────────────────────────────────────────────────
+// Fetches Spring Training (S) + Regular Season (R) games for the full season.
+// Cached 15 minutes. Sorted ascending (oldest → newest) for schedule display.
+export function useMLBFullSchedule() {
+  const [games,   setGames]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const season   = new Date().getFullYear();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const url = `https://statsapi.mlb.com/api/v1/schedule?teamId=${METS_TEAM_ID}`
+      + `&sportId=1&season=${season}&gameTypes=S,R`
+      + `&startDate=${season}-01-01&endDate=${season}-10-31`
+      + `&hydrate=linescore,decisions,team`;
+
+    cachedFetch(`fullsched_${season}`, url, 900_000)
+      .then(json => {
+        if (cancelled) return;
+        const all = [];
+        (json.dates || []).forEach(date => {
+          (date.games || []).forEach(g => {
+            const isHome = g.teams?.home?.team?.id === METS_TEAM_ID;
+            const mets   = isHome ? g.teams?.home : g.teams?.away;
+            const opp    = isHome ? g.teams?.away : g.teams?.home;
+            all.push({
+              gamePk:      g.gamePk,
+              date:        g.gameDate,
+              displayDate: date.date,
+              status:      g.status?.detailedState || '',
+              statusCode:  g.status?.statusCode || '',
+              isHome,
+              metsScore:   mets?.score,
+              oppScore:    opp?.score,
+              oppName:     opp?.team?.name || '',
+              oppId:       opp?.team?.id,
+              venue:       g.venue?.name || '',
+              inning:      g.linescore?.currentInning,
+              inningHalf:  g.linescore?.inningHalf,
+              gameType:    g.gameType,   // 'S' = Spring Training, 'R' = Regular Season
+              result:      mets?.isWinner === true ? 'W' : mets?.isWinner === false ? 'L' : null,
+              winPitch:    g.decisions?.winner?.fullName,
+              losePitch:   g.decisions?.loser?.fullName,
+              savePitch:   g.decisions?.save?.fullName,
+            });
+          });
+        });
+        setGames(all.sort((a, b) => new Date(a.date) - new Date(b.date)));
+        setLoading(false);
+      })
+      .catch(e => { if (!cancelled) { setError(e.message); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, []);
+
+  return { games, loading, error };
+}
+
+// ─── MLB TRANSACTIONS HOOK ────────────────────────────────────────────────────
+// Fetches recent Mets transactions: optionings, recalls, DFA, etc.
+// Cached 30 minutes.
+export function useMLBTransactions(daysBack = 90) {
+  const [transactions, setTransactions] = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(start.getDate() - daysBack);
+    const fmt      = d => d.toISOString().slice(0, 10);
+    const todayStr = fmt(today);
+    const url = `https://statsapi.mlb.com/api/v1/transactions?teamId=${METS_TEAM_ID}`
+      + `&startDate=${fmt(start)}&endDate=${todayStr}`;
+
+    cachedFetch(`txns_${daysBack}_${todayStr}`, url, 1_800_000)
+      .then(json => {
+        if (cancelled) return;
+        const txns = (json.transactions || [])
+          .filter(t => t.typeCode && t.person)
+          .sort((a, b) => new Date(b.effectiveDate || b.date) - new Date(a.effectiveDate || a.date));
+        setTransactions(txns);
+        setLoading(false);
+      })
+      .catch(e => { if (!cancelled) { setError(e.message); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [daysBack]);
+
+  return { transactions, loading, error };
+}
+
+// ─── METS NEWS FEED HOOK ──────────────────────────────────────────────────────
+// Fetches the Mets official RSS feed via allorigins.win (free, no-key CORS proxy).
+// Parses XML client-side. Cached 10 minutes.
+export function useMetsNewsFeed() {
+  const [articles, setArticles] = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const rss      = 'https://www.mets.com/feeds/rss.xml';
+    const proxy    = `https://api.allorigins.win/get?url=${encodeURIComponent(rss)}`;
+    const todayStr = new Date().toISOString().slice(0, 13); // cache per-hour
+
+    cachedFetch(`metsnews_${todayStr}`, proxy, 600_000)
+      .then(json => {
+        if (cancelled) return;
+        const text   = json.contents || '';
+        const parser = new DOMParser();
+        const xml    = parser.parseFromString(text, 'text/xml');
+        const items  = Array.from(xml.querySelectorAll('item'));
+        const parsed = items.slice(0, 25).map(el => {
+          // Extract thumbnail from enclosure or media:thumbnail
+          const enclosure = el.querySelector('enclosure');
+          const thumb = el.querySelector('media\\:thumbnail, thumbnail')?.getAttribute('url')
+            || enclosure?.getAttribute('url') || null;
+          return {
+            title: el.querySelector('title')?.textContent?.trim() || '',
+            link:  el.querySelector('link')?.textContent?.trim() || '',
+            desc:  el.querySelector('description')?.textContent?.replace(/<[^>]*>/g, '').trim() || '',
+            date:  el.querySelector('pubDate')?.textContent?.trim() || '',
+            thumb,
+          };
+        }).filter(a => a.title);
+        setArticles(parsed);
+        setLoading(false);
+      })
+      .catch(e => { if (!cancelled) { setError(e.message); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, []);
+
+  return { articles, loading, error };
+}

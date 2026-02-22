@@ -1,20 +1,152 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { PROMOS, EGGROLL_TEAMS } from '../data/promos.js';
+import { useMLBFullSchedule } from '../hooks.js';
+
+// ─── FULL SCHEDULE SECTION ────────────────────────────────────────────────────
+function FullScheduleSection({ gameType }) {
+  const { games, loading, error } = useMLBFullSchedule();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const filtered = useMemo(() =>
+    games.filter(g => g.gameType === gameType),
+    [games, gameType]
+  );
+
+  // Group by month
+  const byMonth = useMemo(() => {
+    const map = {};
+    for (const g of filtered) {
+      const key = g.displayDate?.slice(0, 7) || 'Unknown';
+      if (!map[key]) map[key] = [];
+      map[key].push(g);
+    }
+    return map;
+  }, [filtered]);
+
+  const monthKeys = Object.keys(byMonth).sort();
+
+  function statusLabel(g) {
+    const s = g.statusCode || '';
+    if (s === 'I') return <span className="badge badge-live">LIVE</span>;
+    if (['F','FO','FT','FR','FG'].includes(s)) {
+      if (g.result === 'W') return <span className="badge badge-win">W</span>;
+      if (g.result === 'L') return <span className="badge badge-loss">L</span>;
+      return <span style={{ color: 'var(--muted)', fontSize: '0.65rem' }}>Final</span>;
+    }
+    if (g.displayDate < today) return <span style={{ color: 'var(--muted)', fontSize: '0.62rem' }}>Past</span>;
+    if (g.displayDate === today) return <span className="badge badge-gold">TODAY</span>;
+    return <span style={{ color: 'var(--muted)', fontSize: '0.62rem' }}>—</span>;
+  }
+
+  function scoreLabel(g) {
+    const s = g.statusCode || '';
+    const done  = ['F','FO','FT','FR','FG'].includes(s);
+    const live  = s === 'I';
+    if ((done || live) && g.metsScore !== undefined && g.oppScore !== undefined) {
+      const color = g.result === 'W' ? 'var(--win)' : g.result === 'L' ? 'var(--loss)' : 'var(--text2)';
+      return <span style={{ fontFamily: 'Bebas Neue', fontSize: '1rem', color }}>{g.metsScore}–{g.oppScore}</span>;
+    }
+    return null;
+  }
+
+  function monthLabel(key) {
+    const d = new Date(key + '-01');
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+
+  if (loading) return (
+    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem' }}>
+      Loading schedule from MLB…
+    </div>
+  );
+  if (error) return (
+    <div style={{ padding: '1rem', color: 'var(--loss)', fontSize: '0.78rem', background: 'rgba(255,68,68,0.06)', borderRadius: 6 }}>
+      ⚠ Could not load schedule: {error}
+    </div>
+  );
+  if (filtered.length === 0) return (
+    <div style={{ padding: '1rem', color: 'var(--muted)', fontSize: '0.78rem' }}>
+      No {gameType === 'S' ? 'spring training' : 'regular season'} games found for 2026.
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {monthKeys.map(mKey => (
+        <div key={mKey}>
+          <div style={{ fontFamily: 'Oswald', fontSize: '0.65rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--orange)', marginBottom: '0.5rem', paddingBottom: '0.4rem', borderBottom: '1px solid rgba(255,89,16,0.2)' }}>
+            {monthLabel(mKey)} ({byMonth[mKey].length} games)
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+            {byMonth[mKey].map(g => {
+              const isPast  = g.displayDate < today;
+              const isToday = g.displayDate === today;
+              return (
+                <div key={g.gamePk} className={`full-sched-row ${isToday ? 'full-sched-today' : ''} ${isPast ? 'full-sched-past' : ''}`}>
+                  <div className="fsr-date">{new Date(g.displayDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                  <div className="fsr-matchup">
+                    <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'Oswald', marginRight: '0.3rem' }}>{g.isHome ? 'vs' : '@'}</span>
+                    <span style={{ fontFamily: 'Oswald', fontSize: '0.82rem', color: isPast ? 'var(--muted)' : 'var(--text)' }}>{g.oppName}</span>
+                  </div>
+                  <div className="fsr-venue" style={{ color: 'var(--muted)', fontSize: '0.6rem', fontFamily: 'DM Mono' }}>{g.isHome ? 'Citi Field' : g.venue?.split(',')[0]}</div>
+                  <div className="fsr-score">{scoreLabel(g)}</div>
+                  <div className="fsr-status">{statusLabel(g)}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ─── SCHEDULE VIEW ────────────────────────────────────────────────────────────
 export function ScheduleView({ userData, onEditGame }) {
   const { gameRecords = {} } = userData;
   const today = new Date().toISOString().slice(0, 10);
   const [expandedId, setExpandedId] = useState(null);
+  const [schedMode, setSchedMode]   = useState('promo'); // 'promo' | 'spring' | 'regular'
 
   const toggleExpand = id => setExpandedId(prev => prev === id ? null : id);
+
+  // Detect if we are currently in spring training period (roughly Feb–March)
+  const month = new Date().getMonth() + 1; // 1-12
+  const isSpringTime = month >= 2 && month <= 3;
 
   return (
     <>
       <div className="page-hdr">
-        <div className="page-title">📅 2026 Promo Schedule</div>
-        <div className="page-sub">All 20 Promotional Games · Tap any row for details · Citi Field</div>
+        <div className="page-title">📅 2026 Mets Schedule</div>
+        <div className="page-sub">Spring Training · Regular Season · Promo Tracker</div>
       </div>
+
+      {/* Sub-tab bar */}
+      <div className="sched-sub-tabs">
+        <button className={`sst-btn ${schedMode === 'promo'   ? 'active' : ''}`} onClick={() => setSchedMode('promo')}>
+          🎁 Promo Tracker
+        </button>
+        <button className={`sst-btn ${schedMode === 'spring'  ? 'active' : ''}`} onClick={() => setSchedMode('spring')}>
+          🌴 Spring Training {isSpringTime && <span className="sst-now">NOW</span>}
+        </button>
+        <button className={`sst-btn ${schedMode === 'regular' ? 'active' : ''}`} onClick={() => setSchedMode('regular')}>
+          📅 Regular Season
+        </button>
+      </div>
+
+      {schedMode === 'spring' && (
+        <div className="card">
+          <FullScheduleSection gameType="S" />
+        </div>
+      )}
+
+      {schedMode === 'regular' && (
+        <div className="card">
+          <FullScheduleSection gameType="R" />
+        </div>
+      )}
+
+      {schedMode === 'promo' && (
       <div className="card">
         <div className="tbl-wrap">
           <table>
@@ -201,6 +333,7 @@ export function ScheduleView({ userData, onEditGame }) {
           </table>
         </div>
       </div>
+      )}
     </>
   );
 }
