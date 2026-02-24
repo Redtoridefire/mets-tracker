@@ -1,14 +1,20 @@
 import { useState, useEffect } from 'react';
-import { useWeather, weatherIcon, useMLBSchedule, useMLBStandings, useMLBFullSchedule } from '../hooks.js';
+import { useWeather, weatherIcon, useMLBSchedule, useMLBStandings, useMLBFullSchedule, useMLBTeamStats } from '../hooks.js';
 import { PROMOS } from '../data/promos.js';
+import { getDailyFact, CATEGORY_COLORS } from '../data/mets-facts.js';
 
 // ─── SPRING TRAINING CARD ─────────────────────────────────────────────────────
 function SpringTrainingCard() {
   const { games, loading } = useMLBFullSchedule();
   const today = new Date().toISOString().slice(0, 10);
+  const month = new Date().getMonth() + 1; // 1–12
 
-  const stGames = games.filter(g => g.gameType === 'S');
-  if (!loading && stGames.length === 0) return null;
+  const stGames  = games.filter(g => g.gameType === 'S');
+  const rsGames  = games.filter(g => g.gameType === 'R');
+  const rsStarted = rsGames.some(g => g.result !== null); // a reg-season result exists
+
+  // Auto-hide once regular season is underway (first RS result in April+) or past April
+  if (!loading && (stGames.length === 0 || (rsStarted && month >= 4))) return null;
 
   const played  = stGames.filter(g => g.result);
   const stWins  = played.filter(g => g.result === 'W').length;
@@ -73,6 +79,74 @@ function SpringTrainingCard() {
 
       <div style={{ fontSize: '0.5rem', color: 'var(--muted)', marginTop: '0.5rem', fontFamily: 'DM Mono' }}>
         Live data from MLB Stats API · {stGames.length} ST games scheduled
+      </div>
+    </div>
+  );
+}
+
+// ─── METS FACT OF THE DAY ─────────────────────────────────────────────────────
+function FactOfDay() {
+  const { fact, category } = getDailyFact();
+  const style = CATEGORY_COLORS[category] || CATEGORY_COLORS.History;
+  return (
+    <div className="fact-card" style={{ background: style.bg, borderColor: style.border, marginBottom: '1.5rem' }}>
+      <div className="fact-eyebrow" style={{ color: style.color }}>⚾ Mets Fact of the Day · {category}</div>
+      <div className="fact-text">"{fact}"</div>
+    </div>
+  );
+}
+
+// ─── TEAM STATS CARD ──────────────────────────────────────────────────────────
+function TeamStatsCard() {
+  const { batting, pitching, loading } = useMLBTeamStats();
+
+  if (loading) return (
+    <div className="card" style={{ marginBottom: '1.5rem' }}>
+      <div className="loading-shimmer" style={{ height: 72 }} />
+    </div>
+  );
+  if (!batting && !pitching) return null;
+
+  const fmt   = (v, d = 3) => v !== undefined && v !== null ? parseFloat(v).toFixed(d).replace(/^0\./, '.') : '—';
+  const fmtI  = v => v !== undefined && v !== null ? String(v) : '—';
+
+  return (
+    <div className="card" style={{ marginBottom: '1.5rem' }}>
+      <div className="card-title">📊 Team Stats — 2026 Season</div>
+      <div className="team-stats-grid">
+        {batting && (
+          <div className="team-stats-group">
+            <div className="team-stats-label">🏏 Batting</div>
+            <div className="team-stats-row">
+              <div className="ts-item"><div className="ts-val">{fmt(batting.avg)}</div><div className="ts-lbl">AVG</div></div>
+              <div className="ts-item"><div className="ts-val">{fmt(batting.obp)}</div><div className="ts-lbl">OBP</div></div>
+              <div className="ts-item"><div className="ts-val">{fmt(batting.slg)}</div><div className="ts-lbl">SLG</div></div>
+              <div className="ts-item"><div className="ts-val">{fmt(batting.ops)}</div><div className="ts-lbl">OPS</div></div>
+              <div className="ts-item"><div className="ts-val">{fmtI(batting.homeRuns)}</div><div className="ts-lbl">HR</div></div>
+              <div className="ts-item"><div className="ts-val">{fmtI(batting.rbi)}</div><div className="ts-lbl">RBI</div></div>
+              <div className="ts-item"><div className="ts-val">{fmtI(batting.runs)}</div><div className="ts-lbl">R</div></div>
+              <div className="ts-item"><div className="ts-val">{fmtI(batting.stolenBases)}</div><div className="ts-lbl">SB</div></div>
+            </div>
+          </div>
+        )}
+        {pitching && (
+          <div className="team-stats-group">
+            <div className="team-stats-label">⚡ Pitching</div>
+            <div className="team-stats-row">
+              <div className="ts-item"><div className="ts-val">{parseFloat(pitching.era||0).toFixed(2)}</div><div className="ts-lbl">ERA</div></div>
+              <div className="ts-item"><div className="ts-val">{fmt(pitching.whip)}</div><div className="ts-lbl">WHIP</div></div>
+              <div className="ts-item"><div className="ts-val">{fmtI(pitching.strikeOuts)}</div><div className="ts-lbl">K</div></div>
+              <div className="ts-item"><div className="ts-val">{fmtI(pitching.baseOnBalls)}</div><div className="ts-lbl">BB</div></div>
+              <div className="ts-item"><div className="ts-val">{fmtI(pitching.saves)}</div><div className="ts-lbl">SV</div></div>
+              <div className="ts-item"><div className="ts-val">{fmtI(pitching.wins)}-{fmtI(pitching.losses)}</div><div className="ts-lbl">W-L</div></div>
+              <div className="ts-item"><div className="ts-val">{parseFloat(pitching.inningsPitched||0).toFixed(0)}</div><div className="ts-lbl">IP</div></div>
+              <div className="ts-item"><div className="ts-val">{fmtI(pitching.shutouts)}</div><div className="ts-lbl">SHO</div></div>
+            </div>
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: '0.48rem', color: 'var(--muted)', marginTop: '0.5rem', fontFamily: 'DM Mono' }}>
+        MLB Stats API · Updated every 60 min
       </div>
     </div>
   );
@@ -463,6 +537,8 @@ export default function OverviewView({ userData, todayGame, todayPromo, onLogGam
         </div>
       )}
 
+      <FactOfDay />
+
       <WeatherWidget />
 
       <div style={{ height: '1.5rem' }} />
@@ -473,6 +549,8 @@ export default function OverviewView({ userData, todayGame, todayPromo, onLogGam
       </div>
 
       <div style={{ height: '1.5rem' }} />
+
+      <TeamStatsCard />
 
       <div className="grid-2">
         <div className="card">

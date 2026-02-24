@@ -3,8 +3,9 @@ import { PROMOS, EGGROLL_TEAMS } from '../data/promos.js';
 import { useMLBFullSchedule } from '../hooks.js';
 
 // ─── FULL SCHEDULE SECTION ────────────────────────────────────────────────────
-function FullScheduleSection({ gameType }) {
+function FullScheduleSection({ gameType, userData, onEditGame }) {
   const { games, loading, error } = useMLBFullSchedule();
+  const { gameRecords = {} }      = userData || {};
   const today = new Date().toISOString().slice(0, 10);
 
   const filtered = useMemo(() =>
@@ -79,18 +80,40 @@ function FullScheduleSection({ gameType }) {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
             {byMonth[mKey].map(g => {
-              const isPast  = g.displayDate < today;
-              const isToday = g.displayDate === today;
+              const isPast   = g.displayDate < today;
+              const isToday  = g.displayDate === today;
+              const recKey   = `mlb_${g.gamePk}`;
+              const rec      = gameRecords[recKey] || {};
+              const logged   = rec.attended || rec.planned;
+              const gameObj  = {
+                id: recKey, gamePk: g.gamePk,
+                emoji: g.isHome ? '🏟️' : '✈️',
+                opponent: g.oppName, oppShort: g.oppName?.split(' ').pop(),
+                display: new Date(g.displayDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                time: '', icon: '⚾', promo: gameType === 'S' ? 'Spring Training' : 'Regular Season',
+              };
               return (
                 <div key={g.gamePk} className={`full-sched-row ${isToday ? 'full-sched-today' : ''} ${isPast ? 'full-sched-past' : ''}`}>
                   <div className="fsr-date">{new Date(g.displayDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
                   <div className="fsr-matchup">
                     <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'Oswald', marginRight: '0.3rem' }}>{g.isHome ? 'vs' : '@'}</span>
                     <span style={{ fontFamily: 'Oswald', fontSize: '0.82rem', color: isPast ? 'var(--muted)' : 'var(--text)' }}>{g.oppName}</span>
+                    {g.broadcasts?.length > 0 && (
+                      <span className="fsr-broadcast">{g.broadcasts.slice(0, 2).join(' · ')}</span>
+                    )}
                   </div>
                   <div className="fsr-venue" style={{ color: 'var(--muted)', fontSize: '0.6rem', fontFamily: 'DM Mono' }}>{g.isHome ? 'Citi Field' : g.venue?.split(',')[0]}</div>
                   <div className="fsr-score">{scoreLabel(g)}</div>
-                  <div className="fsr-status">{statusLabel(g)}</div>
+                  <div className="fsr-status">
+                    {statusLabel(g)}
+                    {onEditGame && (
+                      <button className={`btn btn-sm ${logged ? 'btn-outline' : 'btn-ghost'}`}
+                        style={{ fontSize: '0.5rem', padding: '0.15rem 0.4rem', marginLeft: '0.4rem', minHeight: 'unset' }}
+                        onClick={e => { e.stopPropagation(); onEditGame(gameObj); }}>
+                        {rec.attended ? '✏' : rec.planned ? '🎯' : '+'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -136,13 +159,13 @@ export function ScheduleView({ userData, onEditGame }) {
 
       {schedMode === 'spring' && (
         <div className="card">
-          <FullScheduleSection gameType="S" />
+          <FullScheduleSection gameType="S" userData={userData} onEditGame={onEditGame} />
         </div>
       )}
 
       {schedMode === 'regular' && (
         <div className="card">
-          <FullScheduleSection gameType="R" />
+          <FullScheduleSection gameType="R" userData={userData} onEditGame={onEditGame} />
         </div>
       )}
 
@@ -585,9 +608,34 @@ export function EggrollView({ userData, onSaveEggroll }) {
 }
 
 // ─── MAP VIEW ─────────────────────────────────────────────────────────────────
+const SECTION_INFO = {
+  '101': { level: 'Field Level', location: 'Right Field Corner', tip: 'Great view of the right-field foul pole. Easy access to the Delta Club Lounge nearby.', fact: 'The foul pole here was custom-painted Mets blue for the 2009 opening season.' },
+  '102': { level: 'Field Level', location: 'Right Field', tip: 'Elevated angle gives you a panoramic view of the entire outfield. Ideal for watching outfield play develop.', fact: 'On summer evenings the shadow line falls perfectly mid-section — one half sun, one half shade.' },
+  '103': { level: 'Field Level', location: 'Right Center Field', tip: 'Close to the bullpen — you can hear catchers calling pitches on quiet nights.', fact: 'Mets relievers warm up right in front of you. Autograph opportunities before games are common here.' },
+  '104': { level: 'Field Level', location: 'Right Field Grandstand', tip: 'Budget-friendly gems with a surprisingly clean angle to home plate.', fact: 'These seats have one of the best sight lines to the high-definition video board above left-center.' },
+  '105': { level: 'Field Level', location: 'First Base Line (RF Side)', tip: 'Foul balls come this way often — stay alert and bring a glove!', fact: 'More foul balls land in sections 105-107 than any other field-level stretch at Citi Field.' },
+  '106': { level: 'Field Level', location: 'First Base Line', tip: 'Excellent sightline down the first-base line. You can see pickoff throws in sharp detail.', fact: 'From here you can clearly see the Mets dugout steps and watch pitching coach visits unfold.' },
+  '107': { level: 'Field Level', location: 'First Base (Dugout Side)', tip: 'Close to the Mets dugout — great for high-fives after home runs and post-inning walks.', fact: 'Section 107 is among the most requested by scouts and player families visiting opposing teams.' },
+  '108': { level: 'Field Level', location: 'Behind First Base', tip: "Watch the first baseman's footwork up close. Perfect angle for seeing double plays turn.", fact: "This section's front row is just 40 feet from first base — closer than any other non-premium seat." },
+  '109': { level: 'Field Level', location: 'First Base / Infield Corner', tip: 'Mid-infield view lets you see both infielder positioning and pitcher delivery clearly.', fact: 'Players often toss balls into this section after the last out of an inning — a fan favorite.' },
+  '110': { level: 'Field Level', location: 'Between 1B and Home Plate', tip: 'A premium sightline combining the pitcher, catcher, and infield in one frame.', fact: 'This area is historically associated with Mets legends who once sat in these box seats as fans.' },
+  '111': { level: 'Field Level', location: 'Behind Home Plate (1B Side)', tip: 'Near-perfect view of pitch location and break. Ideal for serious stat watchers.', fact: 'Citi Field\'s home-plate sections were modeled after Ebbets Field\'s intimate seating geometry.' },
+  '112': { level: 'Field Level', location: 'Behind Home Plate (3B Side)', tip: 'Mirror of 111 — equally great for judging balls and strikes. Great ambience on big nights.', fact: 'Former Mets great Keith Hernandez once called Section 112 his personal favorite to watch a game from.' },
+  '113': { level: 'Field Level', location: 'Between Home Plate and 3B', tip: 'Watch the catcher frame pitches and third baseman range in stunning clarity.', fact: 'The dugout tunnel entrance for the Mets is just beyond the 3B wall visible from here.' },
+  '114': { level: 'Field Level', location: 'Third Base (Dugout Side)', tip: "Visiting team's dugout is directly opposite — you'll overhear a lot from here!", fact: 'Some visiting managers have been caught using hand signals from the dugout that fans in 114 spotted first.' },
+  '115': { level: 'Field Level', location: 'Behind Third Base', tip: "Watch the third baseman's dives and double-play pivots up close — spectacular from here.", fact: 'Wright Way: David Wright made many memorable diving stops clearly visible from this section.' },
+  '116': { level: 'Field Level', location: 'Third Base Line', tip: 'Foul tips and ground-rule doubles come this way. Stay sharp — good souvenir territory.', fact: 'The chalk line is re-drawn right in front of this section before every game by the grounds crew.' },
+  '117': { level: 'Field Level', location: 'Third Base Line (LF Side)', tip: 'Relaxed atmosphere with a nice wide-angle view of the whole left side of the diamond.', fact: 'You can see the visitors clubhouse windows from here on the upper level if you look just right.' },
+  '118': { level: 'Field Level', location: 'Left Field Grandstand', tip: 'Great view of left-field play and the scoreboard. Often breezy on hot days.', fact: 'Left field at Citi Field plays differently each season as the fence distance was adjusted in 2012.' },
+  '119': { level: 'Field Level', location: 'Left Center Field', tip: 'Watch the center fielder track fly balls — the depth perception from here is incredible.', fact: 'The apple used to pop up in center field before the 2012 renovation — visible from this section.' },
+  '120': { level: 'Field Level', location: 'Left Field / Center Field', tip: 'Panoramic outfield view — perfect for watching positioning shifts unfold in real time.', fact: "The Mets' famous Home Run Apple now sits near center-left, visible when homers are hit." },
+  '121': { level: 'Field Level', location: 'Left Field Corner', tip: 'Near the left-field foul pole. Unique angle for judging fair/foul calls down the line.', fact: 'On cool October nights, this section has some of the warmest pockets due to stadium wind flow patterns.' },
+};
+
 export function MapView({ userData }) {
   const { gameRecords = {} } = userData;
   const [selected, setSelected] = useState(null);
+  const [mapTab, setMapTab] = useState('map');
 
   const visitedSections = new Set(
     Object.values(gameRecords).filter(r => r?.section).map(r => r.section)
@@ -631,14 +679,38 @@ export function MapView({ userData }) {
     ? Object.entries(gameRecords).filter(([,r]) => r?.section === selected).map(([id]) => PROMOS.find(p => p.id === Number(id))).filter(Boolean)
     : [];
 
+  const info = selected ? SECTION_INFO[selected] : null;
+
   return (
     <>
       <div className="page-hdr">
         <div className="page-title">🏟️ Citi Field Map</div>
-        <div className="page-sub">Click a Section · Track Your Seat History · Flushing, NY</div>
+        <div className="page-sub">Click a section to explore · Track your seat history · Flushing, NY</div>
       </div>
 
-      <div className="map-wrap">
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+        {[['map','🗺️ Map'],['guide','📋 Section Guide']].map(([k,l]) => (
+          <button key={k} className={`btn ${mapTab===k?'btn-primary':'btn-outline'}`} style={{ fontSize: '0.72rem', padding: '0.35rem 0.85rem' }} onClick={() => setMapTab(k)}>{l}</button>
+        ))}
+      </div>
+
+      {mapTab === 'guide' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+          {Object.entries(SECTION_INFO).map(([sec, inf]) => (
+            <div key={sec} className="card" style={{ padding: '1rem', cursor: 'pointer', borderColor: visitedSections.has(sec) ? 'rgba(255,89,16,0.5)' : undefined }} onClick={() => { setMapTab('map'); setSelected(sec); }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <span style={{ fontFamily: 'Bebas Neue', fontSize: '1.3rem', color: 'var(--orange)', letterSpacing: '0.06em' }}>§ {sec}</span>
+                {visitedSections.has(sec) && <span style={{ fontSize: '0.6rem', color: 'var(--win)', background: 'rgba(0,200,100,0.1)', border: '1px solid rgba(0,200,100,0.3)', borderRadius: '4px', padding: '0.1rem 0.4rem' }}>✓ Visited</span>}
+              </div>
+              <div style={{ fontFamily: 'Oswald', fontSize: '0.72rem', color: 'var(--text)', letterSpacing: '0.04em', marginBottom: '0.3rem' }}>{inf.location}</div>
+              <div style={{ fontSize: '0.6rem', color: 'var(--muted)', lineHeight: 1.5, marginBottom: '0.4rem' }}>{inf.tip}</div>
+              <div style={{ fontSize: '0.58rem', color: 'var(--gold)', lineHeight: 1.5, borderTop: '1px solid rgba(0,45,92,0.2)', paddingTop: '0.4rem' }}>⭐ {inf.fact}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {mapTab === 'map' && <div className="map-wrap">
         <div className="map-svg">
           <div className="card" style={{ padding: '1rem' }}>
             <svg viewBox="0 0 680 480" style={{ width: '100%', height: 'auto' }}>
@@ -713,9 +785,20 @@ export function MapView({ userData }) {
               <div style={{ fontFamily: 'Bebas Neue', fontSize: '1.6rem', color: 'var(--orange)', letterSpacing: '0.08em', lineHeight: 1 }}>
                 Section {selected}
               </div>
+              {info && (
+                <>
+                  <div style={{ fontFamily: 'Oswald', fontSize: '0.72rem', color: 'var(--text2)', letterSpacing: '0.06em', margin: '0.3rem 0 0.5rem', textTransform: 'uppercase' }}>{info.location}</div>
+                  <div style={{ fontSize: '0.58rem', color: 'var(--muted)', lineHeight: 1.6, background: 'rgba(0,45,92,0.2)', borderRadius: '5px', padding: '0.5rem 0.6rem', marginBottom: '0.5rem' }}>
+                    💡 {info.tip}
+                  </div>
+                  <div style={{ fontSize: '0.58rem', color: 'var(--gold)', lineHeight: 1.6, background: 'rgba(180,140,0,0.08)', borderRadius: '5px', padding: '0.5rem 0.6rem', marginBottom: '0.5rem' }}>
+                    ⭐ {info.fact}
+                  </div>
+                </>
+              )}
               {visitedSections.has(selected) ? (
                 <>
-                  <div style={{ fontSize: '0.65rem', color: 'var(--win)', margin: '0.4rem 0' }}>✓ You've sat here!</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--win)', margin: '0.4rem 0 0.3rem' }}>✓ You've sat here!</div>
                   {selectedVisits.map(p => (
                     <div key={p.id} style={{ fontSize: '0.65rem', color: 'var(--text2)', padding: '0.35rem 0', borderBottom: '1px solid rgba(0,45,92,0.3)' }}>
                       • {p.display} vs {p.oppShort}
@@ -723,15 +806,23 @@ export function MapView({ userData }) {
                   ))}
                 </>
               ) : (
-                <div style={{ fontSize: '0.65rem', color: 'var(--muted)', marginTop: '0.5rem' }}>No visits logged here yet.</div>
+                <div style={{ fontSize: '0.62rem', color: 'var(--muted)', marginTop: '0.3rem' }}>No visits logged here yet. Click 📋 Section Guide to explore all sections.</div>
               )}
+            </div>
+          )}
+
+          {!selected && (
+            <div className="card" style={{ padding: '1.25rem', textAlign: 'center' }}>
+              <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>👆</div>
+              <div style={{ fontFamily: 'Oswald', fontSize: '0.7rem', color: 'var(--muted)', letterSpacing: '0.1em' }}>CLICK ANY SECTION</div>
+              <div style={{ fontSize: '0.6rem', color: 'var(--muted)', marginTop: '0.3rem' }}>View tips, fun facts &amp; your visit history</div>
             </div>
           )}
 
           <div className="card" style={{ padding: '1.25rem' }}>
             <div className="card-title">Your Sections</div>
             {visitedSections.size === 0
-              ? <div style={{ fontSize: '0.65rem', color: 'var(--muted)' }}>No sections logged yet</div>
+              ? <div style={{ fontSize: '0.65rem', color: 'var(--muted)' }}>No sections logged yet — log a game with a seat section to start tracking!</div>
               : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                   {[...visitedSections].map(s => (
                     <span key={s} onClick={() => setSelected(s)} style={{ cursor: 'pointer', background: 'rgba(255,89,16,0.15)', color: 'var(--orange)', border: '1px solid rgba(255,89,16,0.4)', borderRadius: '4px', padding: '0.2rem 0.5rem', fontSize: '0.65rem', fontFamily: 'Oswald', letterSpacing: '0.08em' }}>
@@ -742,7 +833,7 @@ export function MapView({ userData }) {
             }
           </div>
         </div>
-      </div>
+      </div>}
     </>
   );
 }

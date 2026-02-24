@@ -109,7 +109,7 @@ export function useMLBSchedule() {
 
     const url = `https://statsapi.mlb.com/api/v1/schedule?teamId=${METS_TEAM_ID}`
       + `&startDate=${fmt(start)}&endDate=${fmt(end)}&sportId=1`
-      + `&hydrate=linescore,decisions,team`;
+      + `&hydrate=linescore,decisions,team,broadcasts`;
 
     // Cache key includes today's date so it busts naturally at midnight
     cachedFetch(`schedule_${todayStr}`, url, 90_000)
@@ -140,6 +140,7 @@ export function useMLBSchedule() {
               winPitch:   g.decisions?.winner?.fullName,
               losePitch:  g.decisions?.loser?.fullName,
               savePitch:  g.decisions?.save?.fullName,
+              broadcasts: (g.broadcasts || []).filter(b => b.type === 'TV').map(b => b.name),
             });
           });
         });
@@ -157,10 +158,11 @@ export function useMLBSchedule() {
 }
 
 // ─── MLB ROSTER + STATS HOOK ─────────────────────────────────────────────────
-// Roster cached 6h. Individual player stats cached 2h.
+// Roster cached 6h. Individual player stats cached 2h. Bio data cached 24h.
 export function useMLBRoster() {
   const [roster,  setRoster]  = useState([]);
   const [stats,   setStats]   = useState({});
+  const [bios,    setBios]    = useState({});
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
   const abortRef = useRef(null);
@@ -218,6 +220,36 @@ export function useMLBRoster() {
           if (!cancelled) setStats({ ...allStats });
         }
         if (!cancelled) setLoading(false);
+
+        // ── Load bio data for all players (batch) ─────────────────────────
+        if (!cancelled && players.length > 0) {
+          const ids    = players.map(p => p.id).join(',');
+          const bioUrl = `https://statsapi.mlb.com/api/v1/people?personIds=${ids}`
+            + `&fields=people,id,birthDate,birthCity,birthStateProvince,birthCountry`
+            + `,height,weight,bats,pitchHand,currentAge,draftYear,mlbDebutDate,nameSlug`;
+          cachedFetch(`bios_${season}`, bioUrl, 86_400_000) // 24h cache
+            .then(json => {
+              if (cancelled) return;
+              const m = {};
+              for (const p of (json.people || [])) {
+                m[p.id] = {
+                  age:          p.currentAge,
+                  birthDate:    p.birthDate,
+                  birthCity:    p.birthCity,
+                  birthState:   p.birthStateProvince,
+                  birthCountry: p.birthCountry,
+                  height:       p.height,
+                  weight:       p.weight,
+                  bats:         p.bats?.code,
+                  throwsHand:   p.pitchHand?.code,
+                  draftYear:    p.draftYear,
+                  debutDate:    p.mlbDebutDate,
+                };
+              }
+              setBios(m);
+            })
+            .catch(() => {}); // bio is non-critical, silently ignore
+        }
       })
       .catch(e => {
         if (!cancelled) { setError(e.message); setLoading(false); }
@@ -226,7 +258,7 @@ export function useMLBRoster() {
     return () => { cancelled = true; };
   }, []);
 
-  return { roster, stats, loading, error };
+  return { roster, stats, bios, loading, error };
 }
 
 // ─── MLB STANDINGS HOOK ──────────────────────────────────────────────────────
@@ -273,7 +305,7 @@ export function useMLBFullSchedule() {
     const url = `https://statsapi.mlb.com/api/v1/schedule?teamId=${METS_TEAM_ID}`
       + `&sportId=1&season=${season}&gameTypes=S,R`
       + `&startDate=${season}-01-01&endDate=${season}-10-31`
-      + `&hydrate=linescore,decisions,team`;
+      + `&hydrate=linescore,decisions,team,broadcasts`;
 
     cachedFetch(`fullsched_${season}`, url, 900_000)
       .then(json => {
@@ -303,6 +335,7 @@ export function useMLBFullSchedule() {
               winPitch:    g.decisions?.winner?.fullName,
               losePitch:   g.decisions?.loser?.fullName,
               savePitch:   g.decisions?.save?.fullName,
+              broadcasts:  (g.broadcasts || []).filter(b => b.type === 'TV').map(b => b.name),
             });
           });
         });
@@ -352,46 +385,113 @@ export function useMLBTransactions(daysBack = 90) {
 }
 
 // ─── METS NEWS FEED HOOK ──────────────────────────────────────────────────────
-// Fetches the Mets official RSS feed via allorigins.win (free, no-key CORS proxy).
-// Parses XML client-side. Cached 10 minutes.
+// Fetches Mets news via rss2json.com (free, reliable, no-key, CORS-safe).
+// Primary: mets.com/feeds/rss.xml  |  Fallback: mlb.com/mets/news/rss.xml
+// Cached 10 minutes per hour-bucket.
 export function useMetsNewsFeed() {
   const [articles, setArticles] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState(null);
+  const [source,   setSource]   = useState('');
+
+  const toArticles = items => items.slice(0, 25).map(i => ({
+    title: i.title?.trim() || '',
+    link:  i.link?.trim()  || '',
+    desc:  (i.description || i.content || '').replace(/<[^>]*>/g, '').trim().slice(0, 200),
+    date:  i.pubDate || '',
+    thumb: i.thumbnail || i.enclosure?.link || null,
+    author:i.author || '',
+  })).filter(a => a.title);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const rss      = 'https://www.mets.com/feeds/rss.xml';
-    const proxy    = `https://api.allorigins.win/get?url=${encodeURIComponent(rss)}`;
-    const todayStr = new Date().toISOString().slice(0, 13); // cache per-hour
+    const todayStr = new Date().toISOString().slice(0, 13);
+    const BASE = 'https://api.rss2json.com/v1/api.json?rss_url=';
+    const FEEDS = [
+      { url: 'https://www.mets.com/feeds/rss.xml',          label: 'mets.com' },
+      { url: 'https://www.mlb.com/mets/news/rss.xml',        label: 'mlb.com' },
+      { url: 'https://feeds.fansided.com/amazinavenue/feed/', label: 'Amazin\' Avenue' },
+    ];
 
-    cachedFetch(`metsnews_${todayStr}`, proxy, 600_000)
-      .then(json => {
+    const tryFeed = async (idx) => {
+      if (idx >= FEEDS.length) throw new Error('All feeds failed');
+      const feed = FEEDS[idx];
+      const apiUrl = BASE + encodeURIComponent(feed.url);
+      const json = await cachedFetch(`metsnews_${idx}_${todayStr}`, apiUrl, 600_000);
+      if (json.status !== 'ok' || !json.items?.length) return tryFeed(idx + 1);
+      return { items: json.items, label: feed.label };
+    };
+
+    tryFeed(0)
+      .then(({ items, label }) => {
         if (cancelled) return;
-        const text   = json.contents || '';
-        const parser = new DOMParser();
-        const xml    = parser.parseFromString(text, 'text/xml');
-        const items  = Array.from(xml.querySelectorAll('item'));
-        const parsed = items.slice(0, 25).map(el => {
-          // Extract thumbnail from enclosure or media:thumbnail
-          const enclosure = el.querySelector('enclosure');
-          const thumb = el.querySelector('media\\:thumbnail, thumbnail')?.getAttribute('url')
-            || enclosure?.getAttribute('url') || null;
-          return {
-            title: el.querySelector('title')?.textContent?.trim() || '',
-            link:  el.querySelector('link')?.textContent?.trim() || '',
-            desc:  el.querySelector('description')?.textContent?.replace(/<[^>]*>/g, '').trim() || '',
-            date:  el.querySelector('pubDate')?.textContent?.trim() || '',
-            thumb,
-          };
-        }).filter(a => a.title);
-        setArticles(parsed);
+        setArticles(toArticles(items));
+        setSource(label);
         setLoading(false);
       })
       .catch(e => { if (!cancelled) { setError(e.message); setLoading(false); } });
     return () => { cancelled = true; };
   }, []);
 
-  return { articles, loading, error };
+  return { articles, loading, error, source };
+}
+
+// ─── MLB TEAM STATS HOOK ─────────────────────────────────────────────────────
+// Fetches Mets team batting + pitching aggregate stats for the current season.
+// Cached 60 minutes.
+export function useMLBTeamStats() {
+  const [batting,  setBatting]  = useState(null);
+  const [pitching, setPitching] = useState(null);
+  const [loading,  setLoading]  = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const season   = new Date().getFullYear();
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    const hitUrl  = `https://statsapi.mlb.com/api/v1/teams/${METS_TEAM_ID}/stats`
+      + `?stats=season&season=${season}&group=hitting&sportId=1`;
+    const pitchUrl = `https://statsapi.mlb.com/api/v1/teams/${METS_TEAM_ID}/stats`
+      + `?stats=season&season=${season}&group=pitching&sportId=1`;
+
+    Promise.all([
+      cachedFetch(`teamhit_${season}_${todayStr}`,   hitUrl,   3_600_000),
+      cachedFetch(`teampitch_${season}_${todayStr}`, pitchUrl, 3_600_000),
+    ]).then(([hitJson, pitchJson]) => {
+      if (cancelled) return;
+      setBatting( hitJson.stats?.[0]?.splits?.[0]?.stat  || null);
+      setPitching(pitchJson.stats?.[0]?.splits?.[0]?.stat || null);
+      setLoading(false);
+    }).catch(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  return { batting, pitching, loading };
+}
+
+// ─── MLB GAME DETAIL HOOK ────────────────────────────────────────────────────
+// Fetches linescore for a specific game. Pass null gamePk to skip.
+// Cached 5 minutes.
+export function useMLBGameDetail(gamePk) {
+  const [linescore, setLinescore] = useState(null);
+  const [loading,   setLoading]   = useState(false);
+
+  useEffect(() => {
+    if (!gamePk) return;
+    let cancelled = false;
+    setLoading(true);
+    const url = `https://statsapi.mlb.com/api/v1/game/${gamePk}/linescore`;
+    cachedFetch(`linescore_${gamePk}`, url, 300_000)
+      .then(json => {
+        if (cancelled) return;
+        setLinescore(json);
+        setLoading(false);
+      })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [gamePk]);
+
+  return { linescore, loading };
 }
