@@ -386,7 +386,7 @@ export function useMLBTransactions(daysBack = 90) {
 
 // ─── METS NEWS FEED HOOK ──────────────────────────────────────────────────────
 // Fetches Mets news via rss2json.com (free, reliable, no-key, CORS-safe).
-// Primary: mets.com/feeds/rss.xml  |  Fallback: mlb.com/mets/news/rss.xml
+// Primary: sny.tv/mets-feed  |  Fallback chain: mlb.com → Amazin' Avenue
 // Cached 10 minutes per hour-bucket.
 export function useMetsNewsFeed() {
   const [articles, setArticles] = useState([]);
@@ -409,18 +409,23 @@ export function useMetsNewsFeed() {
     const todayStr = new Date().toISOString().slice(0, 13);
     const BASE = 'https://api.rss2json.com/v1/api.json?rss_url=';
     const FEEDS = [
-      { url: 'https://www.mets.com/feeds/rss.xml',          label: 'mets.com' },
-      { url: 'https://www.mlb.com/mets/news/rss.xml',        label: 'mlb.com' },
-      { url: 'https://feeds.fansided.com/amazinavenue/feed/', label: 'Amazin\' Avenue' },
+      { url: 'https://sny.tv/mets-feed',                          label: 'SNY' },
+      { url: 'https://www.mlb.com/mets/news/rss.xml',             label: 'MLB.com' },
+      { url: 'https://feeds.fansided.com/amazinavenue/feed/',      label: "Amazin' Avenue" },
+      { url: 'https://www.mets.com/feeds/rss.xml',                 label: 'mets.com' },
     ];
 
     const tryFeed = async (idx) => {
       if (idx >= FEEDS.length) throw new Error('All feeds failed');
       const feed = FEEDS[idx];
       const apiUrl = BASE + encodeURIComponent(feed.url);
-      const json = await cachedFetch(`metsnews_${idx}_${todayStr}`, apiUrl, 600_000);
-      if (json.status !== 'ok' || !json.items?.length) return tryFeed(idx + 1);
-      return { items: json.items, label: feed.label };
+      try {
+        const json = await cachedFetch(`metsnews_${idx}_${todayStr}`, apiUrl, 600_000);
+        if (json.status !== 'ok' || !json.items?.length) return tryFeed(idx + 1);
+        return { items: json.items, label: feed.label };
+      } catch {
+        return tryFeed(idx + 1);
+      }
     };
 
     tryFeed(0)
