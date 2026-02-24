@@ -45,8 +45,8 @@ const TXN_LABELS = {
 };
 
 export default function FeedView() {
-  const { articles, loading: newsLoading, error: newsError } = useMetsNewsFeed();
-  const { transactions, loading: txnLoading }                = useMLBTransactions(30);
+  const { articles, loading: newsLoading, error: newsError, source } = useMetsNewsFeed();
+  const { transactions, loading: txnLoading }                        = useMLBTransactions(30);
 
   const recentTxns = transactions
     .filter(t => TXN_ICONS[t.typeCode])
@@ -57,7 +57,7 @@ export default function FeedView() {
       <div className="page-hdr">
         <div className="page-title">📰 Mets Feed</div>
         <div className="page-sub">
-          Live news from mets.com · Recent roster moves · Public sources, no login
+          {source ? `Via ${source}` : 'SNY · Amazin\' Avenue · MLB.com'} · Recent roster moves · No login required
         </div>
       </div>
 
@@ -79,12 +79,14 @@ export default function FeedView() {
             <div className="feed-error">
               <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📡</div>
               <div style={{ fontFamily: 'Oswald', fontSize: '0.75rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.25rem' }}>
-                Feed Unavailable
+                Feed Temporarily Unavailable
               </div>
               <div style={{ fontSize: '0.7rem', color: 'var(--muted)', lineHeight: 1.5 }}>
-                Could not reach mets.com RSS. Check back later or visit{' '}
-                <a href="https://www.mets.com/news" target="_blank" rel="noopener noreferrer"
-                  style={{ color: 'var(--orange)' }}>mets.com/news</a> directly.
+                Could not reach any news source right now. Check back in a few minutes or visit{' '}
+                <a href="https://sny.tv/mets" target="_blank" rel="noopener noreferrer"
+                  style={{ color: 'var(--orange)' }}>SNY.tv</a> or{' '}
+                <a href="https://amazinavenue.com" target="_blank" rel="noopener noreferrer"
+                  style={{ color: 'var(--orange)' }}>Amazin' Avenue</a> directly.
               </div>
             </div>
           )}
