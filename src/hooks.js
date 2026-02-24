@@ -385,53 +385,106 @@ export function useMLBTransactions(daysBack = 90) {
 }
 
 // ─── METS NEWS FEED HOOK ──────────────────────────────────────────────────────
-// Fetches Mets news via rss2json.com (free, reliable, no-key, CORS-safe).
-// Primary: sny.tv/mets-feed  |  Fallback chain: mlb.com → Amazin' Avenue
-// Cached 10 minutes per hour-bucket.
+// Two-strategy approach:
+//   A) allorigins raw proxy → DOMParser (works even when rss2json is blocked)
+//   B) rss2json JSON API (fallback)
+// Feed priority: SNY → Amazin' Avenue → MLB.com
+// Each feed is tried via Strategy A first, then B, before moving to next feed.
 export function useMetsNewsFeed() {
   const [articles, setArticles] = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState(null);
   const [source,   setSource]   = useState('');
 
-  const toArticles = items => items.slice(0, 25).map(i => ({
-    title: i.title?.trim() || '',
-    link:  i.link?.trim()  || '',
-    desc:  (i.description || i.content || '').replace(/<[^>]*>/g, '').trim().slice(0, 200),
-    date:  i.pubDate || '',
-    thumb: i.thumbnail || i.enclosure?.link || null,
-    author:i.author || '',
-  })).filter(a => a.title);
-
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const todayStr = new Date().toISOString().slice(0, 13);
-    const BASE = 'https://api.rss2json.com/v1/api.json?rss_url=';
-    const FEEDS = [
-      { url: 'https://sny.tv/mets-feed',                          label: 'SNY' },
-      { url: 'https://www.mlb.com/mets/news/rss.xml',             label: 'MLB.com' },
-      { url: 'https://feeds.fansided.com/amazinavenue/feed/',      label: "Amazin' Avenue" },
-      { url: 'https://www.mets.com/feeds/rss.xml',                 label: 'mets.com' },
-    ];
+    const hourKey = new Date().toISOString().slice(0, 13);
 
-    const tryFeed = async (idx) => {
-      if (idx >= FEEDS.length) throw new Error('All feeds failed');
-      const feed = FEEDS[idx];
-      const apiUrl = BASE + encodeURIComponent(feed.url);
+    // Parse raw RSS/Atom XML text → articles array
+    const parseXML = (text) => {
       try {
-        const json = await cachedFetch(`metsnews_${idx}_${todayStr}`, apiUrl, 600_000);
-        if (json.status !== 'ok' || !json.items?.length) return tryFeed(idx + 1);
-        return { items: json.items, label: feed.label };
-      } catch {
-        return tryFeed(idx + 1);
-      }
+        const xml  = new DOMParser().parseFromString(text, 'text/xml');
+        const items = [...xml.querySelectorAll('item, entry')];
+        return items.slice(0, 20).map(el => {
+          const t    = tag => el.querySelector(tag)?.textContent?.trim() || '';
+          const attr = (sel, a) => { try { return el.querySelector(sel)?.getAttribute(a) || null; } catch { return null; } };
+          const thumb = attr('media\\:content', 'url') || attr('media\\:thumbnail', 'url') || attr('enclosure', 'url');
+          const link  = t('link') || attr('link', 'href') || t('guid') || '';
+          return {
+            title:  t('title'),
+            link,
+            desc:   t('description').replace(/<[^>]*>/g, '').trim().slice(0, 200),
+            date:   t('pubDate') || t('published') || t('updated'),
+            thumb,
+            author: t('author') || t('creator'),
+          };
+        }).filter(a => a.title && a.link);
+      } catch { return []; }
     };
 
-    tryFeed(0)
+    // Strategy A: allorigins raw proxy → DOMParser
+    const viaAllorigins = async (feedUrl, cacheKey) => {
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}`;
+      const ck = `${CACHE_PFX}${cacheKey}_ao`;
+      let text;
+      try {
+        const cached = localStorage.getItem(ck);
+        if (cached) { const { data, ts } = JSON.parse(cached); if (Date.now() - ts < 600_000) text = data; }
+      } catch { /* ignore */ }
+      if (!text) {
+        const resp = await fetch(proxyUrl);
+        if (!resp.ok) throw new Error(`allorigins ${resp.status}`);
+        text = await resp.text();
+        try { localStorage.setItem(ck, JSON.stringify({ data: text, ts: Date.now() })); } catch { /* full */ }
+      }
+      const items = parseXML(text);
+      if (!items.length) throw new Error('empty after parse');
+      return items;
+    };
+
+    // Strategy B: rss2json JSON API
+    const viaRss2json = async (feedUrl, cacheKey) => {
+      const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feedUrl)}`;
+      const json = await cachedFetch(`${cacheKey}_r2j_${hourKey}`, apiUrl, 600_000);
+      if (json.status !== 'ok' || !json.items?.length) throw new Error('rss2json non-ok');
+      return json.items.slice(0, 20).map(i => ({
+        title:  i.title?.trim() || '',
+        link:   i.link?.trim()  || '',
+        desc:   (i.description || i.content || '').replace(/<[^>]*>/g, '').trim().slice(0, 200),
+        date:   i.pubDate || '',
+        thumb:  i.thumbnail || i.enclosure?.link || null,
+        author: i.author || '',
+      })).filter(a => a.title && a.link);
+    };
+
+    const FEEDS = [
+      { url: 'https://sny.tv/mets-feed',                         label: 'SNY',            key: 'sny'  },
+      { url: 'https://feeds.fansided.com/amazinavenue/feed/',     label: "Amazin' Avenue", key: 'aa'   },
+      { url: 'https://www.mlb.com/mets/news/rss.xml',            label: 'MLB.com',        key: 'mlb'  },
+    ];
+
+    const run = async () => {
+      for (const feed of FEEDS) {
+        // Try Strategy A (allorigins) first
+        try {
+          const items = await viaAllorigins(feed.url, `metsnews_${feed.key}_${hourKey}`);
+          return { items, label: feed.label };
+        } catch { /* fall through to Strategy B */ }
+
+        // Try Strategy B (rss2json)
+        try {
+          const items = await viaRss2json(feed.url, `metsnews_${feed.key}`);
+          return { items, label: feed.label };
+        } catch { /* try next feed */ }
+      }
+      throw new Error('All sources unavailable');
+    };
+
+    run()
       .then(({ items, label }) => {
         if (cancelled) return;
-        setArticles(toArticles(items));
+        setArticles(items);
         setSource(label);
         setLoading(false);
       })
