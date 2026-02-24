@@ -94,6 +94,14 @@ function GameCard({ game: g }) {
             {new Date(g.date).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' })}
             {g.venue && ` · ${g.venue}`}
           </div>
+          {g.broadcasts && g.broadcasts.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.35rem' }}>
+              <span style={{ fontSize: '0.52rem', color: 'var(--muted)', fontFamily: 'DM Mono', marginRight: '0.1rem', alignSelf: 'center' }}>📺</span>
+              {g.broadcasts.map(ch => (
+                <span key={ch} style={{ fontSize: '0.55rem', fontFamily: 'Oswald', letterSpacing: '0.06em', background: 'rgba(0,45,92,0.5)', border: '1px solid rgba(0,80,160,0.5)', borderRadius: '3px', padding: '0.1rem 0.4rem', color: 'var(--text2)' }}>{ch}</span>
+              ))}
+            </div>
+          )}
         </div>
 
         {g.metsScore !== undefined && g.metsScore !== null && (

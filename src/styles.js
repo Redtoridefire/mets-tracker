@@ -1076,6 +1076,93 @@ const CSS = `
   .feed-txn-type { font-size: 0.55rem; color: var(--muted); margin-top: 0.05rem; }
   .feed-txn-date { font-size: 0.52rem; color: var(--muted); margin-top: 0.08rem; font-family: 'DM Mono', monospace; }
 
+  /* ── FACT OF THE DAY ────────────────────────────────────────────────────── */
+  .fact-card {
+    border: 1px solid;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .fact-eyebrow {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.62rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+  .fact-text {
+    font-family: 'Georgia', serif;
+    font-size: 0.92rem;
+    color: var(--text);
+    line-height: 1.65;
+    font-style: italic;
+  }
+
+  /* ── TEAM STATS ─────────────────────────────────────────────────────────── */
+  .team-stats-grid  { display: flex; flex-direction: column; gap: 1rem; }
+  .team-stats-group { }
+  .team-stats-label {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.55rem;
+  }
+  .team-stats-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .ts-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    text-align: center;
+    min-width: 46px;
+  }
+  .ts-val {
+    font-family: 'Bebas Neue', cursive;
+    font-size: 1.15rem;
+    color: var(--text);
+    line-height: 1;
+    letter-spacing: 0.04em;
+  }
+  .ts-lbl {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.48rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 0.2rem;
+  }
+
+  /* ── FSR BROADCAST CHIP ─────────────────────────────────────────────────── */
+  .fsr-broadcast {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.55rem;
+    letter-spacing: 0.06em;
+    background: rgba(0,45,92,0.5);
+    border: 1px solid rgba(0,80,160,0.45);
+    border-radius: 3px;
+    padding: 0.1rem 0.4rem;
+    color: var(--text2);
+    margin-right: 0.25rem;
+    white-space: nowrap;
+  }
+
+  /* ── PLAYER BIO SECTION ─────────────────────────────────────────────────── */
+  .bio-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem 0.75rem;
+    margin-top: 0.5rem;
+  }
+  .bio-item  { }
+  .bio-lbl { font-size: 0.48rem; color: var(--muted); font-family: 'Oswald', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
+  .bio-val { font-size: 0.68rem; color: var(--text); font-family: 'DM Mono', monospace; margin-top: 0.1rem; }
+
   /* Responsive for feed + schedule + AAA */
   @media (max-width: 768px) {
     .feed-layout { grid-template-columns: 1fr; }
@@ -1085,6 +1172,10 @@ const CSS = `
     .sched-sub-tabs { flex-direction: column; }
     .sst-btn { min-width: unset; }
     .st-record { font-size: 1.2rem; }
+    .team-stats-row { gap: 0.35rem; }
+    .ts-item { min-width: 40px; padding: 0.3rem 0.45rem; }
+    .ts-val { font-size: 1rem; }
+    .fact-text { font-size: 0.82rem; }
   }
 `;
 

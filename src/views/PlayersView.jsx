@@ -1,6 +1,21 @@
 import { useState, useMemo } from 'react';
 import { useMLBRoster } from '../hooks.js';
 
+function BioSection({ bio }) {
+  if (!bio) return null;
+  const from = [bio.birthCity, bio.birthState, bio.birthCountry].filter(Boolean).join(', ');
+  return (
+    <div style={{ marginTop: '0.55rem', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '0.45rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.22rem 0.5rem' }}>
+      {bio.age       ? <div style={{ fontSize: '0.57rem', color: 'var(--muted)' }}>Age <span style={{ color: 'var(--text2)' }}>{bio.age}</span></div> : null}
+      {bio.height    ? <div style={{ fontSize: '0.57rem', color: 'var(--muted)' }}>Ht <span style={{ color: 'var(--text2)' }}>{bio.height} · {bio.weight}lb</span></div> : null}
+      {bio.bats      ? <div style={{ fontSize: '0.57rem', color: 'var(--muted)' }}>B/T <span style={{ color: 'var(--text2)' }}>{bio.bats}/{bio.throwsHand}</span></div> : null}
+      {bio.draftYear ? <div style={{ fontSize: '0.57rem', color: 'var(--muted)' }}>Draft <span style={{ color: 'var(--text2)' }}>{bio.draftYear}</span></div> : null}
+      {from          ? <div style={{ fontSize: '0.53rem', color: 'var(--muted)', gridColumn: '1/-1' }}>From <span style={{ color: 'var(--text2)' }}>{from}</span></div> : null}
+      {bio.debutDate ? <div style={{ fontSize: '0.53rem', color: 'var(--muted)', gridColumn: '1/-1' }}>Debut <span style={{ color: 'var(--text2)' }}>{bio.debutDate?.slice(0,10)}</span></div> : null}
+    </div>
+  );
+}
+
 function fmt(val, dec = 3) {
   if (val === undefined || val === null || val === '') return '—';
   const n = parseFloat(val);
@@ -23,7 +38,7 @@ function StatBox({ v, l }) {
 }
 
 // ─── HITTER FLIP CARD ─────────────────────────────────────────────────────────
-function HitterCard({ player, statObj, flipped, onFlip }) {
+function HitterCard({ player, statObj, bio, flipped, onFlip }) {
   const s      = statObj?.hitting;
   const season = statObj?.season;
 
@@ -61,7 +76,7 @@ function HitterCard({ player, statObj, flipped, onFlip }) {
           <div className="player-flip-hint">Tap for advanced stats ↔</div>
         </div>
 
-        {/* ── BACK: advanced stats ── */}
+        {/* ── BACK: advanced stats + bio ── */}
         <div className="player-flip-back">
           <div style={{ fontFamily: 'Oswald', fontSize: '0.68rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--orange)', marginBottom: '0.5rem', lineHeight: 1.2 }}>
             {player.name}
@@ -81,6 +96,7 @@ function HitterCard({ player, statObj, flipped, onFlip }) {
           ) : (
             <div className="loading-shimmer" style={{ height: 80 }} />
           )}
+          <BioSection bio={bio} />
           <div className="player-flip-hint">Tap to flip back ↔</div>
         </div>
 
@@ -90,7 +106,7 @@ function HitterCard({ player, statObj, flipped, onFlip }) {
 }
 
 // ─── PITCHER FLIP CARD ────────────────────────────────────────────────────────
-function PitcherCard({ player, statObj, flipped, onFlip }) {
+function PitcherCard({ player, statObj, bio, flipped, onFlip }) {
   const s      = statObj?.pitching;
   const season = statObj?.season;
 
@@ -148,6 +164,7 @@ function PitcherCard({ player, statObj, flipped, onFlip }) {
           ) : (
             <div className="loading-shimmer" style={{ height: 80 }} />
           )}
+          <BioSection bio={bio} />
           <div className="player-flip-hint">Tap to flip back ↔</div>
         </div>
 
@@ -158,7 +175,7 @@ function PitcherCard({ player, statObj, flipped, onFlip }) {
 
 // ─── PLAYERS VIEW ─────────────────────────────────────────────────────────────
 export default function PlayersView() {
-  const { roster, stats, loading, error } = useMLBRoster();
+  const { roster, stats, bios, loading, error } = useMLBRoster();
   const [filter,       setFilter]       = useState('all');
   const [search,       setSearch]       = useState('');
   const [flippedCards, setFlippedCards] = useState(new Set());
@@ -246,8 +263,8 @@ export default function PlayersView() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1rem' }}>
           {filtered.map(p => (
             p.posType === 'Pitcher'
-              ? <PitcherCard key={p.id} player={p} statObj={stats[p.id]} flipped={flippedCards.has(p.id)} onFlip={() => toggleFlip(p.id)} />
-              : <HitterCard  key={p.id} player={p} statObj={stats[p.id]} flipped={flippedCards.has(p.id)} onFlip={() => toggleFlip(p.id)} />
+              ? <PitcherCard key={p.id} player={p} statObj={stats[p.id]} bio={bios[p.id]} flipped={flippedCards.has(p.id)} onFlip={() => toggleFlip(p.id)} />
+              : <HitterCard  key={p.id} player={p} statObj={stats[p.id]} bio={bios[p.id]} flipped={flippedCards.has(p.id)} onFlip={() => toggleFlip(p.id)} />
           ))}
         </div>
       )}
