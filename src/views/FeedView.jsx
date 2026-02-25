@@ -57,7 +57,7 @@ export default function FeedView() {
       <div className="page-hdr">
         <div className="page-title">📰 Mets Feed</div>
         <div className="page-sub">
-          {source ? `Via ${source}` : 'SNY · Amazin\' Avenue · MLB.com'} · Recent roster moves · No login required
+          {source ? `Via ${source}` : 'SNY · Amazin\' Avenue · MLB.com · NY Post'} · Recent roster moves · No login required
         </div>
       </div>
 

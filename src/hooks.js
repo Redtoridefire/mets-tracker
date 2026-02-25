@@ -459,9 +459,10 @@ export function useMetsNewsFeed() {
     };
 
     const FEEDS = [
-      { url: 'https://sny.tv/mets-feed',                         label: 'SNY',            key: 'sny'  },
-      { url: 'https://feeds.fansided.com/amazinavenue/feed/',     label: "Amazin' Avenue", key: 'aa'   },
-      { url: 'https://www.mlb.com/mets/news/rss.xml',            label: 'MLB.com',        key: 'mlb'  },
+      { url: 'https://sny.tv/mets-feed',                         label: 'SNY',            key: 'sny'    },
+      { url: 'https://feeds.fansided.com/amazinavenue/feed/',     label: "Amazin' Avenue", key: 'aa'     },
+      { url: 'https://www.mlb.com/mets/news/rss.xml',            label: 'MLB.com',        key: 'mlb'    },
+      { url: 'https://nypost.com/sports/baseball/mets/feed/',     label: 'NY Post',        key: 'nypost' },
     ];
 
     const run = async () => {
