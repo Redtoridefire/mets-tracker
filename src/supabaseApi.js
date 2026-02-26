@@ -201,6 +201,8 @@ export async function listMemoryReports(limit = 80) {
   const resp = await fetch(url, { headers: authHeaders(session.access_token) });
   if (!resp.ok) {
     const text = await resp.text();
+    // Backward-compatible fallback: older projects may not have memory_reports yet.
+    if (resp.status === 404 || text.includes('PGRST205') || text.includes('memory_reports')) return [];
     throw new Error(`Report load failed (${resp.status}): ${text.slice(0, 120)}`);
   }
   return resp.json();

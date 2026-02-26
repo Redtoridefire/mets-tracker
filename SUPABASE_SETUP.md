@@ -144,6 +144,7 @@ using (
 - Broken image rows are hidden in-app, and broken rows owned by the current user are auto-cleaned from metadata on refresh.
 - Uploads are compressed client-side to reduce storage and bandwidth costs before upload.
 - Users can submit a simple report (`memory_reports`) on posts they do not own.
+- If `memory_reports` has not been created yet, the app now gracefully falls back to an empty moderation queue (no board-breaking error).
 
 
 ### If you already ran an older version
