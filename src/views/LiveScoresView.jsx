@@ -59,6 +59,18 @@ export default function LiveScoresView() {
         </>
       )}
 
+      {!loading && live.length === 0 && (
+        <div className="card" style={{ marginBottom: '1rem', borderColor: 'rgba(255, 167, 38, 0.35)', background: 'rgba(255, 167, 38, 0.06)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', fontFamily: 'Oswald', letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '0.68rem', color: 'var(--orange)' }}>
+            <span>🟠</span>
+            <span>No live game right now</span>
+          </div>
+          <div style={{ marginTop: '0.35rem', fontSize: '0.62rem', color: 'var(--muted)' }}>
+            Live inning indicators appear automatically once the next Mets game is in progress.
+          </div>
+        </div>
+      )}
+
       {recent.length > 0 && (
         <>
           <div className="card-title" style={{ marginBottom: '0.75rem' }}>📋 Recent Results</div>
