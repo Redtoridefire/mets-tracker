@@ -209,10 +209,19 @@ function useGameFeed(gamePk) {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12_000);
+
     setLoading(true);
     setError(null);
 
-    fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`)
+    fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`, {
+      signal: controller.signal,
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      cache: 'no-store',
+      mode: 'cors',
+    })
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -227,9 +236,14 @@ function useGameFeed(gamePk) {
           setError(e.message);
           setLoading(false);
         }
-      });
+      })
+      .finally(() => clearTimeout(timeout));
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timeout);
+    };
   }, [gamePk]);
 
   return { details, loading, error };

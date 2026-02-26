@@ -5,21 +5,61 @@ import { METS_TEAM_ID } from './data/promos.js';
 // Checks localStorage before hitting the network. Respects a TTL (ms).
 // Cache keys are prefixed with metsHQ_cache_ to avoid collisions.
 const CACHE_PFX = 'metsHQ_cache_';
+const MAX_CACHE_ENTRY_BYTES = 900_000;
+const ALLOWED_FETCH_HOSTS = new Set([
+  'wttr.in',
+  'statsapi.mlb.com',
+  'api.allorigins.win',
+  'api.rss2json.com',
+]);
 
-function cachedFetch(key, url, ttlMs) {
+function safeParseJSON(raw) {
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+function isAllowedUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && ALLOWED_FETCH_HOSTS.has(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function fetchJsonWithTimeout(url, timeoutMs = 12_000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  return fetch(url, {
+    signal: controller.signal,
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+    cache: 'no-store',
+    mode: 'cors',
+  })
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+    .finally(() => clearTimeout(timeout));
+}
+
+function cachedFetch(key, url, ttlMs, opts = {}) {
+  const timeoutMs = opts.timeoutMs || 12_000;
+  if (!isAllowedUrl(url)) return Promise.reject(new Error('Blocked external host'));
+
   try {
     const raw = localStorage.getItem(CACHE_PFX + key);
     if (raw) {
-      const { data, ts } = JSON.parse(raw);
-      if (Date.now() - ts < ttlMs) return Promise.resolve(data);
+      const parsed = safeParseJSON(raw);
+      if (parsed?.ts && Date.now() - parsed.ts < ttlMs) return Promise.resolve(parsed.data);
     }
   } catch { /* corrupt cache entry — ignore and re-fetch */ }
 
-  return fetch(url)
-    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+  return fetchJsonWithTimeout(url, timeoutMs)
     .then(data => {
       try {
-        localStorage.setItem(CACHE_PFX + key, JSON.stringify({ data, ts: Date.now() }));
+        const payload = JSON.stringify({ data, ts: Date.now() });
+        if (payload.length <= MAX_CACHE_ENTRY_BYTES) {
+          localStorage.setItem(CACHE_PFX + key, payload);
+        }
       } catch { /* storage full — serve data without caching */ }
       return data;
     });
@@ -433,7 +473,7 @@ export function useMetsNewsFeed() {
         if (cached) { const { data, ts } = JSON.parse(cached); if (Date.now() - ts < 600_000) text = data; }
       } catch { /* ignore */ }
       if (!text) {
-        const resp = await fetch(proxyUrl);
+        const resp = await fetch(proxyUrl, { credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store', mode: 'cors' });
         if (!resp.ok) throw new Error(`allorigins ${resp.status}`);
         text = await resp.text();
         try { localStorage.setItem(ck, JSON.stringify({ data: text, ts: Date.now() })); } catch { /* full */ }
