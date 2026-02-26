@@ -475,6 +475,129 @@ const CSS = `
   .game-result-card.live { border-left: 4px solid #ff4444; box-shadow: 0 0 20px rgba(255,68,68,0.1); }
   .game-result-card.upcoming { border-left: 4px solid var(--border2); opacity: 0.8; }
 
+  .game-card-toggle {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    width: 100%;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .game-card-chevron {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-left: auto;
+  }
+
+  .game-result-card.expanded {
+    border-color: var(--border2);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.28);
+  }
+
+  .game-drilldown {
+    margin-top: 0.8rem;
+    border-top: 1px solid rgba(0,45,92,0.45);
+    padding-top: 0.8rem;
+  }
+
+  .game-drilldown-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .game-drilldown-panel {
+    background: rgba(0, 15, 38, 0.75);
+    border: 1px solid rgba(0, 80, 160, 0.35);
+    border-radius: 6px;
+    padding: 0.7rem;
+  }
+
+  .game-drilldown-status {
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: 'Oswald', sans-serif;
+  }
+
+  .inning-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+    gap: 0.45rem;
+  }
+
+  .inning-chip {
+    background: rgba(0,45,92,0.32);
+    border: 1px solid rgba(0,80,179,0.35);
+    border-radius: 5px;
+    padding: 0.4rem;
+  }
+
+  .inning-chip-label {
+    font-family: 'Oswald', sans-serif;
+    letter-spacing: 0.08em;
+    font-size: 0.58rem;
+    color: var(--muted);
+  }
+
+  .inning-chip-score {
+    font-size: 0.63rem;
+    color: var(--text2);
+    margin-top: 0.15rem;
+  }
+
+  .performer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .performer-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    font-size: 0.6rem;
+    border-bottom: 1px solid rgba(0,45,92,0.3);
+    padding-bottom: 0.2rem;
+  }
+
+  .event-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    max-height: 280px;
+    overflow: auto;
+    padding-right: 0.2rem;
+  }
+
+  .event-item {
+    border-left: 2px solid rgba(0,80,179,0.5);
+    padding-left: 0.55rem;
+  }
+
+  .event-meta {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.54rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .event-text {
+    font-size: 0.63rem;
+    color: var(--text);
+    margin-top: 0.15rem;
+    line-height: 1.3;
+  }
+
+  .event-runners {
+    font-size: 0.56rem;
+    color: var(--orange2);
+    margin-top: 0.2rem;
+  }
+
   /* ── TROPHY SHELF ─────────────────────────────────────────────────────────── */
   .trophy-item {
     background: var(--surface);
