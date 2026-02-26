@@ -13,6 +13,7 @@ import LiveScoresView from './views/LiveScoresView.jsx';
 import PlayersView from './views/PlayersView.jsx';
 import AAAView from './views/AAAView.jsx';
 import FeedView from './views/FeedView.jsx';
+import CorkBoardView from './views/CorkBoardView.jsx';
 import { ScheduleView, MyGamesView, TrophyView, EggrollView, MapView } from './views/OtherViews.jsx';
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
@@ -21,6 +22,7 @@ const TABS = [
   { id:'scores',    icon:'🎮', label:'Live Scores',   short:'Scores'   },
   { id:'feed',      icon:'📰', label:'Mets Feed',     short:'Feed'     },
   { id:'schedule',  icon:'📅', label:'Schedule',      short:'Sched'    },
+  { id:'cork',      icon:'📌', label:'Cork Board',    short:'Board'    },
   { id:'mygames',   icon:'🎟️', label:'My Games',      short:'Games'    },
   { id:'aaa',       icon:'🔄', label:'AAA Tracker',   short:'AAA'      },
   { id:'players',   icon:'👥', label:'Player Stats',  short:'Players'  },
@@ -677,6 +679,7 @@ export default function App() {
             {tab === 'scores'    && <LiveScoresView  />}
             {tab === 'feed'      && <FeedView        />}
             {tab === 'schedule'  && <ScheduleView    userData={userData} onEditGame={setEditGame} />}
+            {tab === 'cork'      && <CorkBoardView   />}
             {tab === 'mygames'   && <MyGamesView     userData={userData} onEditGame={setEditGame} />}
             {tab === 'aaa'       && <AAAView         />}
             {tab === 'players'   && <PlayersView     />}

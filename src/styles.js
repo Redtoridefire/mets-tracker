@@ -598,6 +598,53 @@ const CSS = `
     margin-top: 0.2rem;
   }
 
+
+
+  /* ── CORK BOARD ───────────────────────────────────────────────────────────── */
+  .cork-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.9rem;
+  }
+
+  .cork-card {
+    background: linear-gradient(180deg, rgba(17, 42, 66, 0.85), rgba(5, 22, 39, 0.9));
+    border: 1px solid rgba(0, 80, 160, 0.35);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .cork-photo {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    background: rgba(0, 15, 38, 0.8);
+  }
+
+  .cork-meta {
+    padding: 0.6rem 0.65rem 0.7rem;
+  }
+
+  .cork-game {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.56rem;
+    letter-spacing: 0.14em;
+    color: var(--orange2);
+    text-transform: uppercase;
+    margin-bottom: 0.25rem;
+  }
+
+  .cork-caption {
+    font-size: 0.67rem;
+    color: var(--text);
+    line-height: 1.35;
+  }
+
+  .cork-date {
+    margin-top: 0.35rem;
+    font-size: 0.52rem;
+    color: var(--muted);
+  }
   /* ── TROPHY SHELF ─────────────────────────────────────────────────────────── */
   .trophy-item {
     background: var(--surface);
