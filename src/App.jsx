@@ -14,7 +14,7 @@ import PlayersView from './views/PlayersView.jsx';
 import AAAView from './views/AAAView.jsx';
 import FeedView from './views/FeedView.jsx';
 import CorkBoardView from './views/CorkBoardView.jsx';
-import { ScheduleView, MyGamesView, TrophyView, EggrollView, MapView } from './views/OtherViews.jsx';
+import { ScheduleView, MyGamesView, SeasonInsightsView, TrophyView, EggrollView, MapView } from './views/OtherViews.jsx';
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 const TABS = [
@@ -24,6 +24,7 @@ const TABS = [
   { id:'schedule',  icon:'📅', label:'Schedule',      short:'Sched'    },
   { id:'cork',      icon:'📌', label:'Cork Board',    short:'Board'    },
   { id:'mygames',   icon:'🎟️', label:'My Games',      short:'Games'    },
+  { id:'insights',  icon:'📈', label:'Insights',      short:'Trend'    },
   { id:'aaa',       icon:'🔄', label:'AAA Tracker',   short:'AAA'      },
   { id:'players',   icon:'👥', label:'Player Stats',  short:'Players'  },
   { id:'trophy',    icon:'🏆', label:'Trophy Shelf',  short:'Trophy'   },
@@ -681,6 +682,7 @@ export default function App() {
             {tab === 'schedule'  && <ScheduleView    userData={userData} onEditGame={setEditGame} />}
             {tab === 'cork'      && <CorkBoardView   />}
             {tab === 'mygames'   && <MyGamesView     userData={userData} onEditGame={setEditGame} />}
+            {tab === 'insights'  && <SeasonInsightsView userData={userData} />}
             {tab === 'aaa'       && <AAAView         />}
             {tab === 'players'   && <PlayersView     />}
             {tab === 'trophy'    && <TrophyView      userData={userData} />}

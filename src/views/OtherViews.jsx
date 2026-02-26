@@ -473,6 +473,77 @@ function InfoTile({ icon, label, children }) {
   );
 }
 
+
+
+// ─── SEASON INSIGHTS VIEW ─────────────────────────────────────────────────────
+export function SeasonInsightsView({ userData }) {
+  const { gameRecords = {} } = userData;
+  const attended = PROMOS.filter(p => gameRecords[p.id]?.attended);
+  const planned = PROMOS.filter(p => gameRecords[p.id]?.planned && !gameRecords[p.id]?.attended);
+
+  const wins = attended.filter(p => gameRecords[p.id]?.result === 'W').length;
+  const losses = attended.filter(p => gameRecords[p.id]?.result === 'L').length;
+  const totalSpent = attended.reduce((sum, p) => sum + (gameRecords[p.id]?.totalCost || 0), 0);
+  const avgSpend = attended.length ? totalSpent / attended.length : 0;
+  const promosCollected = attended.filter(p => gameRecords[p.id]?.promoCollected).length;
+
+  const byMonthMap = {};
+  for (const p of attended) {
+    const key = String(p.isoDate || '').slice(0, 7);
+    if (!key) continue;
+    const rec = gameRecords[p.id] || {};
+    if (!byMonthMap[key]) byMonthMap[key] = { games: 0, spend: 0, wins: 0, losses: 0 };
+    byMonthMap[key].games += 1;
+    byMonthMap[key].spend += rec.totalCost || 0;
+    if (rec.result === 'W') byMonthMap[key].wins += 1;
+    if (rec.result === 'L') byMonthMap[key].losses += 1;
+  }
+  const byMonth = Object.entries(byMonthMap).sort(([a],[b]) => a.localeCompare(b));
+  const maxGamesInMonth = Math.max(1, ...byMonth.map(([,v]) => v.games));
+
+  return (
+    <>
+      <div className="page-hdr">
+        <div className="page-title">📈 My Mets Season Insights</div>
+        <div className="page-sub">Attendance Trends · Cost Insights · Monthly Breakdown</div>
+      </div>
+
+      <div className="stats-row" style={{ marginBottom: '1.5rem' }}>
+        <div className="stat-card"><div className="big">{attended.length}</div><div className="lbl">Attended</div></div>
+        <div className="stat-card"><div className="big" style={{ color: 'var(--blue3)' }}>{planned.length}</div><div className="lbl">Planned</div></div>
+        <div className="stat-card"><div className="big" style={{ color: wins >= losses ? 'var(--win)' : 'var(--loss)' }}>{wins}-{losses}</div><div className="lbl">W-L Logged</div></div>
+        <div className="stat-card"><div className="big" style={{ color: 'var(--gold)', fontSize: '1.8rem' }}>${totalSpent.toFixed(0)}</div><div className="lbl">Total Spent</div></div>
+        <div className="stat-card"><div className="big" style={{ color: 'var(--orange)', fontSize: '1.8rem' }}>${avgSpend.toFixed(0)}</div><div className="lbl">Avg / Game</div></div>
+        <div className="stat-card"><div className="big">{promosCollected}</div><div className="lbl">Promos Collected</div></div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">📅 Monthly Attendance Momentum</div>
+        {byMonth.length === 0 ? (
+          <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>No attended games yet — log games to unlock your season trendline.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+            {byMonth.map(([m, v]) => {
+              const d = new Date(m + '-01T12:00:00');
+              const label = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+              const pct = Math.max(6, Math.round((v.games / maxGamesInMonth) * 100));
+              return (
+                <div key={m} style={{ display: 'grid', gridTemplateColumns: '110px 1fr auto', gap: '0.65rem', alignItems: 'center' }}>
+                  <div style={{ fontSize: '0.62rem', color: 'var(--text2)', fontFamily: 'Oswald', letterSpacing: '0.08em' }}>{label}</div>
+                  <div style={{ height: 10, background: 'rgba(0,45,92,0.35)', borderRadius: 999, overflow: 'hidden' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,var(--orange),var(--orange2))' }} />
+                  </div>
+                  <div style={{ fontSize: '0.6rem', color: 'var(--muted)', fontFamily: 'DM Mono' }}>{v.games}G · ${v.spend.toFixed(0)}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ─── TROPHY VIEW ─────────────────────────────────────────────────────────────
 export function TrophyView({ userData }) {
   const { gameRecords = {} } = userData;
