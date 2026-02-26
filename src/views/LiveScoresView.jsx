@@ -12,6 +12,13 @@ function inningStatusText(game) {
   return half ? `${half} ${inning}` : `Inning ${inning}`;
 }
 
+function gameStatusDetail(game) {
+  if (game?.statusCode === 'I') return inningStatusText(game);
+  if (game?.result === 'W' || game?.result === 'L') return 'Final';
+  if (game?.statusCode === 'S') return 'Scheduled';
+  return game?.status || '';
+}
+
 export default function LiveScoresView() {
   const { games, loading, error } = useMLBSchedule();
   const [expandedGamePk, setExpandedGamePk] = useState(null);
@@ -87,6 +94,7 @@ function GameCard({ game: g, expandedGamePk, setExpandedGamePk, onOpenHub }) {
   const cls        = isLive ? 'live' : g.result === 'W' ? 'win' : g.result === 'L' ? 'loss' : 'upcoming';
   const isExpanded = expandedGamePk === g.gamePk;
   const inningText = inningStatusText(g);
+  const statusDetail = gameStatusDetail(g);
 
   return (
     <div className={`game-result-card ${cls} ${isExpanded ? 'expanded' : ''}`}>
@@ -120,8 +128,13 @@ function GameCard({ game: g, expandedGamePk, setExpandedGamePk, onOpenHub }) {
                 {g.metsScore} – {g.oppScore}
               </div>
               <div style={{ fontSize: '0.55rem', color: 'var(--muted)', letterSpacing: '0.1em', fontFamily: 'Oswald' }}>
-                NYM – OPP{isLive && inningText ? ` · ${inningText}` : ''}
+                NYM – OPP
               </div>
+              {!!statusDetail && (
+                <div style={{ marginTop: '0.15rem', fontSize: '0.56rem', color: isLive ? 'var(--orange)' : 'var(--muted)', letterSpacing: '0.08em', fontFamily: 'DM Mono', textTransform: 'uppercase' }}>
+                  {isLive ? `Inning: ${statusDetail}` : statusDetail}
+                </div>
+              )}
             </div>
           )}
 
