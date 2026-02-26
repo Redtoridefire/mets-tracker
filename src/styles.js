@@ -490,6 +490,42 @@ const CSS = `
     margin-left: auto;
   }
 
+
+  .game-hub-row {
+    margin-top: 0.5rem;
+  }
+
+  .game-hub-btn {
+    border: 1px solid rgba(255, 89, 16, 0.55);
+    color: var(--orange2);
+    background: rgba(255, 89, 16, 0.08);
+    border-radius: 4px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.54rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.25rem 0.45rem;
+    cursor: pointer;
+  }
+
+  .game-hub {
+    width: min(96vw, 1180px);
+    max-height: 90vh;
+    overflow: auto;
+    background: rgba(0, 9, 26, 0.98);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 1rem;
+  }
+
+  .game-hub-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.8rem;
+  }
+
   .game-result-card.expanded {
     border-color: var(--border2);
     box-shadow: 0 6px 22px rgba(0, 0, 0, 0.28);

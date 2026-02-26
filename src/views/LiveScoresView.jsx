@@ -4,6 +4,7 @@ import { useMLBSchedule } from '../hooks.js';
 export default function LiveScoresView() {
   const { games, loading, error } = useMLBSchedule();
   const [expandedGamePk, setExpandedGamePk] = useState(null);
+  const [hubGame, setHubGame] = useState(null);
 
   const today    = new Date().toISOString().slice(0,10);
   const live     = games.filter(g => g.statusCode === 'I');
@@ -16,6 +17,8 @@ export default function LiveScoresView() {
         <div className="page-title">🎮 Scores & Schedule</div>
         <div className="page-sub">Live · Recent · Upcoming · Via MLB Stats API</div>
       </div>
+
+      {hubGame && <GameHubOverlay game={hubGame} onClose={() => setHubGame(null)} />}
 
       {loading && (
         <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>
@@ -33,7 +36,7 @@ export default function LiveScoresView() {
       {live.length > 0 && (
         <>
           <div className="card-title" style={{ marginBottom: '0.75rem' }}>🔴 LIVE NOW</div>
-          {live.map(g => <GameCard key={g.gamePk} game={g} expandedGamePk={expandedGamePk} setExpandedGamePk={setExpandedGamePk} />)}
+          {live.map(g => <GameCard key={g.gamePk} game={g} expandedGamePk={expandedGamePk} setExpandedGamePk={setExpandedGamePk} onOpenHub={setHubGame} />)}
           <div style={{ height: '1.5rem' }} />
         </>
       )}
@@ -42,7 +45,7 @@ export default function LiveScoresView() {
         <>
           <div className="card-title" style={{ marginBottom: '0.75rem' }}>📋 Recent Results</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '2rem' }}>
-            {recent.map(g => <GameCard key={g.gamePk} game={g} expandedGamePk={expandedGamePk} setExpandedGamePk={setExpandedGamePk} />)}
+            {recent.map(g => <GameCard key={g.gamePk} game={g} expandedGamePk={expandedGamePk} setExpandedGamePk={setExpandedGamePk} onOpenHub={setHubGame} />)}
           </div>
         </>
       )}
@@ -51,7 +54,7 @@ export default function LiveScoresView() {
         <>
           <div className="card-title" style={{ marginBottom: '0.75rem' }}>🗓️ Upcoming Games</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {upcoming.map(g => <GameCard key={g.gamePk} game={g} expandedGamePk={expandedGamePk} setExpandedGamePk={setExpandedGamePk} />)}
+            {upcoming.map(g => <GameCard key={g.gamePk} game={g} expandedGamePk={expandedGamePk} setExpandedGamePk={setExpandedGamePk} onOpenHub={setHubGame} />)}
           </div>
         </>
       )}
@@ -68,20 +71,14 @@ export default function LiveScoresView() {
   );
 }
 
-function GameCard({ game: g, expandedGamePk, setExpandedGamePk }) {
+function GameCard({ game: g, expandedGamePk, setExpandedGamePk, onOpenHub }) {
   const isLive     = g.statusCode === 'I';
-  const isUpcoming = !g.result && !isLive;
   const cls        = isLive ? 'live' : g.result === 'W' ? 'win' : g.result === 'L' ? 'loss' : 'upcoming';
   const isExpanded = expandedGamePk === g.gamePk;
 
   return (
     <div className={`game-result-card ${cls} ${isExpanded ? 'expanded' : ''}`}>
-      <button
-        type="button"
-        className="game-card-toggle"
-        onClick={() => setExpandedGamePk(isExpanded ? null : g.gamePk)}
-        aria-expanded={isExpanded}
-      >
+      <button type="button" className="game-card-toggle" onClick={() => setExpandedGamePk(isExpanded ? null : g.gamePk)} aria-expanded={isExpanded}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', width: '100%' }}>
           <div style={{ minWidth: 90 }}>
             {isLive
@@ -103,14 +100,6 @@ function GameCard({ game: g, expandedGamePk, setExpandedGamePk }) {
               {new Date(g.date).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' })}
               {g.venue && ` · ${g.venue}`}
             </div>
-            {g.broadcasts && g.broadcasts.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.35rem' }}>
-                <span style={{ fontSize: '0.52rem', color: 'var(--muted)', fontFamily: 'DM Mono', marginRight: '0.1rem', alignSelf: 'center' }}>📺</span>
-                {g.broadcasts.map(ch => (
-                  <span key={ch} style={{ fontSize: '0.55rem', fontFamily: 'Oswald', letterSpacing: '0.06em', background: 'rgba(0,45,92,0.5)', border: '1px solid rgba(0,80,160,0.5)', borderRadius: '3px', padding: '0.1rem 0.4rem', color: 'var(--text2)' }}>{ch}</span>
-                ))}
-              </div>
-            )}
           </div>
 
           {g.metsScore !== undefined && g.metsScore !== null && (
@@ -126,28 +115,87 @@ function GameCard({ game: g, expandedGamePk, setExpandedGamePk }) {
         </div>
       </button>
 
-      {(g.winPitch || g.losePitch || g.savePitch) && (
-        <div style={{ marginTop: '0.6rem', fontSize: '0.62rem', color: 'var(--muted)', display: 'flex', gap: '1rem', flexWrap: 'wrap', borderTop: '1px solid rgba(0,45,92,0.3)', paddingTop: '0.5rem' }}>
-          {g.winPitch  && <span style={{ color: 'var(--win)'  }}>W: {g.winPitch}</span>}
-          {g.losePitch && <span style={{ color: 'var(--loss)' }}>L: {g.losePitch}</span>}
-          {g.savePitch && <span style={{ color: 'var(--gold)' }}>SV: {g.savePitch}</span>}
-        </div>
-      )}
+      <div className="game-hub-row">
+        <button type="button" className="game-hub-btn" onClick={() => onOpenHub(g)}>Open Game Hub</button>
+      </div>
 
       {isExpanded && <GameDrillDown game={g} />}
     </div>
   );
 }
 
-function GameDrillDown({ game }) {
+function GameHubOverlay({ game, onClose }) {
   const { details, loading, error } = useGameFeed(game.gamePk);
 
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="game-hub" onClick={e => e.stopPropagation()}>
+        <div className="game-hub-head">
+          <div>
+            <div className="page-title" style={{ fontSize: '1.8rem' }}>⚾ Game Hub</div>
+            <div className="page-sub">{game.isHome ? 'Mets vs' : 'Mets @'} {game.oppName} · {new Date(game.date).toLocaleString()}</div>
+          </div>
+          <button className="btn btn-danger btn-sm" onClick={onClose}>Close</button>
+        </div>
+
+        {loading && <div className="game-drilldown-status">Loading Game Hub details…</div>}
+        {error && <div className="game-drilldown-status" style={{ color: 'var(--loss)' }}>Could not load game feed: {error}</div>}
+        {!loading && !error && details && <GameHubBody details={details} />}
+      </div>
+    </div>
+  );
+}
+
+function GameHubBody({ details }) {
+  const { inningScoring, keyEvents, topPerformers } = details;
+  return (
+    <div>
+      <div className="game-drilldown-grid">
+        <div className="game-drilldown-panel">
+          <div className="card-title" style={{ marginBottom: '0.4rem' }}>Inning Breakdown</div>
+          <div className="inning-grid">
+            {inningScoring.map(inning => (
+              <div key={inning.inning} className="inning-chip">
+                <div className="inning-chip-label">Inning {inning.inning}</div>
+                <div className="inning-chip-score">NYM {inning.metsRuns} · OPP {inning.oppRuns}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="game-drilldown-panel">
+          <div className="card-title" style={{ marginBottom: '0.4rem' }}>Top Mets Performers</div>
+          <div className="performer-list">
+            {topPerformers.length === 0 && <div className="game-drilldown-status">No performer stats yet.</div>}
+            {topPerformers.map(p => (
+              <div key={p.id} className="performer-item"><span>{p.name}</span><span>{p.line}</span></div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="game-drilldown-panel" style={{ marginTop: '0.8rem' }}>
+        <div className="card-title" style={{ marginBottom: '0.4rem' }}>Moment Timeline</div>
+        <div className="event-feed" style={{ maxHeight: '40vh' }}>
+          {keyEvents.length === 0 && <div className="game-drilldown-status">No major events available yet.</div>}
+          {keyEvents.map((event, idx) => (
+            <div key={`${event.inning}-${idx}`} className="event-item">
+              <div className="event-meta">{event.half} {event.inning} · {event.result}</div>
+              <div className="event-text">{event.description}</div>
+              {event.runners.length > 0 && <div className="event-runners">Scored: {event.runners.join(', ')}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GameDrillDown({ game }) {
+  const { details, loading, error } = useGameFeed(game.gamePk);
   if (loading) return <div className="game-drilldown-status">Loading inning-by-inning feed…</div>;
   if (error) return <div className="game-drilldown-status" style={{ color: 'var(--loss)' }}>Could not load game feed: {error}</div>;
   if (!details) return <div className="game-drilldown-status">No feed details are available for this game yet.</div>;
 
   const { inningScoring, keyEvents, topPerformers } = details;
-
   return (
     <div className="game-drilldown">
       <div className="game-drilldown-grid">
@@ -155,47 +203,19 @@ function GameDrillDown({ game }) {
           <div className="card-title" style={{ marginBottom: '0.4rem' }}>Inning Linescore</div>
           <div className="inning-grid">
             {inningScoring.map(inning => (
-              <div key={inning.inning} className="inning-chip">
-                <div className="inning-chip-label">{inning.inning}</div>
-                <div className="inning-chip-score">NYM {inning.metsRuns} · OPP {inning.oppRuns}</div>
-              </div>
+              <div key={inning.inning} className="inning-chip"><div className="inning-chip-label">{inning.inning}</div><div className="inning-chip-score">NYM {inning.metsRuns} · OPP {inning.oppRuns}</div></div>
             ))}
           </div>
         </div>
-
         <div className="game-drilldown-panel">
           <div className="card-title" style={{ marginBottom: '0.4rem' }}>Key Players</div>
-          {topPerformers.length === 0 ? (
-            <div className="game-drilldown-status">No player stats posted yet.</div>
-          ) : (
-            <div className="performer-list">
-              {topPerformers.map(p => (
-                <div key={p.id} className="performer-item">
-                  <span>{p.name}</span>
-                  <span>{p.line}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {topPerformers.length === 0 ? <div className="game-drilldown-status">No player stats posted yet.</div> : <div className="performer-list">{topPerformers.map(p => <div key={p.id} className="performer-item"><span>{p.name}</span><span>{p.line}</span></div>)}</div>}
         </div>
       </div>
-
       <div className="game-drilldown-panel" style={{ marginTop: '0.75rem' }}>
         <div className="card-title" style={{ marginBottom: '0.4rem' }}>Play-by-Play Feed</div>
-        {keyEvents.length === 0 ? (
-          <div className="game-drilldown-status">No scoring or major events yet.</div>
-        ) : (
-          <div className="event-feed">
-            {keyEvents.map((event, idx) => (
-              <div key={`${event.inning}-${idx}`} className="event-item">
-                <div className="event-meta">{event.half} {event.inning} · {event.result}</div>
-                <div className="event-text">{event.description}</div>
-                {event.runners.length > 0 && (
-                  <div className="event-runners">Scored: {event.runners.join(', ')}</div>
-                )}
-              </div>
-            ))}
-          </div>
+        {keyEvents.length === 0 ? <div className="game-drilldown-status">No scoring or major events yet.</div> : (
+          <div className="event-feed">{keyEvents.map((event, idx) => <div key={`${event.inning}-${idx}`} className="event-item"><div className="event-meta">{event.half} {event.inning} · {event.result}</div><div className="event-text">{event.description}</div>{event.runners.length > 0 && <div className="event-runners">Scored: {event.runners.join(', ')}</div>}</div>)}</div>
         )}
       </div>
     </div>
@@ -259,7 +279,6 @@ function parseGameDetails(feed) {
   const innings = feed?.liveData?.linescore?.innings || [];
   const inningScoring = innings.map(i => {
     const homeId = feed?.gameData?.teams?.home?.id;
-    const awayId = feed?.gameData?.teams?.away?.id;
     const metsRuns = metsTeamId === homeId ? i.home?.runs ?? 0 : i.away?.runs ?? 0;
     const oppRuns = metsTeamId === homeId ? i.away?.runs ?? 0 : i.home?.runs ?? 0;
     return { inning: i.num, metsRuns, oppRuns };
@@ -298,9 +317,5 @@ function parseGameDetails(feed) {
     });
   }
 
-  return {
-    inningScoring,
-    keyEvents,
-    topPerformers: topPerformers.sort((a, b) => b.impact - a.impact).slice(0, 6),
-  };
+  return { inningScoring, keyEvents, topPerformers: topPerformers.sort((a, b) => b.impact - a.impact).slice(0, 6) };
 }
