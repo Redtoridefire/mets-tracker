@@ -645,6 +645,41 @@ const CSS = `
     font-size: 0.52rem;
     color: var(--muted);
   }
+
+
+  .cork-lightbox {
+    width: min(96vw, 1200px);
+    max-height: 92vh;
+    background: rgba(0, 9, 26, 0.98);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 0.75rem;
+    overflow: auto;
+    position: relative;
+  }
+
+  .cork-lightbox-close {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    float: right;
+    margin-bottom: 0.5rem;
+  }
+
+  .cork-lightbox-img {
+    width: 100%;
+    height: auto;
+    max-height: 78vh;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #000;
+  }
+
+  .cork-lightbox-meta {
+    clear: both;
+    margin-top: 0.55rem;
+    padding: 0.3rem 0.2rem;
+  }
   /* ── TROPHY SHELF ─────────────────────────────────────────────────────────── */
   .trophy-item {
     background: var(--surface);

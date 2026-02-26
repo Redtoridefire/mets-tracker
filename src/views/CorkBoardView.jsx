@@ -14,6 +14,7 @@ export default function CorkBoardView() {
   const [file, setFile] = useState(null);
   const [currentUserId, setCurrentUserId] = useState('');
   const [deletingId, setDeletingId] = useState('');
+  const [expandedPost, setExpandedPost] = useState(null);
 
   const { configured } = getSupabaseSetupState();
 
@@ -48,6 +49,16 @@ export default function CorkBoardView() {
     }
     load();
   }, [configured]);
+
+
+  useEffect(() => {
+    if (!expandedPost) return;
+    const onKey = e => {
+      if (e.key === 'Escape') setExpandedPost(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [expandedPost]);
 
   const onUpload = async e => {
     e.preventDefault();
@@ -147,7 +158,7 @@ export default function CorkBoardView() {
               {posts.map(post => (
                 <article key={post.id} className="cork-card">
                   {post.signedUrl ? (
-                    <img src={post.signedUrl} alt={post.caption || 'Mets game memory'} className="cork-photo" loading="lazy" />
+                    <img src={post.signedUrl} alt={post.caption || 'Mets game memory'} className="cork-photo" loading="lazy" onClick={() => setExpandedPost(post)} style={{ cursor: 'zoom-in' }} />
                   ) : (
                     <div className="cork-photo" style={{ display: 'grid', placeItems: 'center', color: 'var(--muted)', fontSize: '0.65rem' }}>Image unavailable</div>
                   )}
@@ -172,6 +183,23 @@ export default function CorkBoardView() {
             </div>
           )}
         </>
+      )}
+
+
+      {expandedPost?.signedUrl && (
+        <div className="overlay" onClick={() => setExpandedPost(null)}>
+          <div className="cork-lightbox" onClick={e => e.stopPropagation()}>
+            <button type="button" className="btn btn-danger btn-sm cork-lightbox-close" onClick={() => setExpandedPost(null)}>
+              ✕ Close
+            </button>
+            <img src={expandedPost.signedUrl} alt={expandedPost.caption || 'Expanded Mets game memory'} className="cork-lightbox-img" />
+            <div className="cork-lightbox-meta">
+              {expandedPost.game_label && <div className="cork-game">{expandedPost.game_label}</div>}
+              {expandedPost.caption && <div className="cork-caption">{expandedPost.caption}</div>}
+              <div className="cork-date">{new Date(expandedPost.created_at).toLocaleString()}</div>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
