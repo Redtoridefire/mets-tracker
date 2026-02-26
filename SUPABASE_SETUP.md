@@ -86,12 +86,12 @@ for insert
 to authenticated
 with check (auth.uid() = reporter_id);
 
-drop policy if exists "memory_reports_select_own" on public.memory_reports;
-create policy "memory_reports_select_own"
+drop policy if exists "memory_reports_select_all" on public.memory_reports;
+create policy "memory_reports_select_all"
 on public.memory_reports
 for select
 to authenticated
-using (auth.uid() = reporter_id);
+using (true);
 
 -- Storage bucket
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -144,3 +144,17 @@ using (
 - Broken image rows are hidden in-app, and broken rows owned by the current user are auto-cleaned from metadata on refresh.
 - Uploads are compressed client-side to reduce storage and bandwidth costs before upload.
 - Users can submit a simple report (`memory_reports`) on posts they do not own.
+
+
+### If you already ran an older version
+Run this to update report select policy for the moderation queue:
+
+```sql
+drop policy if exists "memory_reports_select_own" on public.memory_reports;
+drop policy if exists "memory_reports_select_all" on public.memory_reports;
+create policy "memory_reports_select_all"
+on public.memory_reports
+for select
+to authenticated
+using (true);
+```

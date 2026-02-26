@@ -193,6 +193,19 @@ export async function submitMemoryReport(postId, reason = '') {
   }
 }
 
+
+
+export async function listMemoryReports(limit = 80) {
+  const session = await ensureAnonymousSession();
+  const url = `${SB_URL}/rest/v1/memory_reports?select=id,post_id,reporter_id,reason,created_at,memory_posts(id,user_id,image_path,caption,game_label,created_at)&order=created_at.desc&limit=${limit}`;
+  const resp = await fetch(url, { headers: authHeaders(session.access_token) });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Report load failed (${resp.status}): ${text.slice(0, 120)}`);
+  }
+  return resp.json();
+}
+
 export function getSupabaseSetupState() {
   return { configured: hasConfig(), url: SB_URL };
 }
