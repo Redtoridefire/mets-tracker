@@ -120,6 +120,11 @@ function GameCard({ game: g, expandedGamePk, setExpandedGamePk, onOpenHub }) {
               {new Date(g.date).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' })}
               {g.venue && ` · ${g.venue}`}
             </div>
+            {!!statusDetail && (
+              <div style={{ marginTop: '0.22rem', fontSize: '0.58rem', letterSpacing: '0.08em', fontFamily: 'DM Mono', textTransform: 'uppercase', color: isLive ? 'var(--orange)' : 'var(--muted)' }}>
+                {isLive ? `🟠 Live Inning: ${statusDetail}` : `Status: ${statusDetail}`}
+              </div>
+            )}
           </div>
 
           {g.metsScore !== undefined && g.metsScore !== null && (
@@ -130,11 +135,6 @@ function GameCard({ game: g, expandedGamePk, setExpandedGamePk, onOpenHub }) {
               <div style={{ fontSize: '0.55rem', color: 'var(--muted)', letterSpacing: '0.1em', fontFamily: 'Oswald' }}>
                 NYM – OPP
               </div>
-              {!!statusDetail && (
-                <div style={{ marginTop: '0.15rem', fontSize: '0.56rem', color: isLive ? 'var(--orange)' : 'var(--muted)', letterSpacing: '0.08em', fontFamily: 'DM Mono', textTransform: 'uppercase' }}>
-                  {isLive ? `Inning: ${statusDetail}` : statusDetail}
-                </div>
-              )}
             </div>
           )}
 
