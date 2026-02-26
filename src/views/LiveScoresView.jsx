@@ -4,6 +4,14 @@ import { useMLBSchedule } from '../hooks.js';
 const GAME_FEED_CACHE = new Map();
 const GAME_FEED_TTL_MS = 60_000;
 
+function inningStatusText(game) {
+  if (game?.statusCode !== 'I') return '';
+  const inning = game?.inning ? String(game.inning) : '?';
+  const halfRaw = String(game?.inningHalf || '').toLowerCase();
+  const half = halfRaw === 'top' ? 'Top' : halfRaw === 'bottom' ? 'Bottom' : '';
+  return half ? `${half} ${inning}` : `Inning ${inning}`;
+}
+
 export default function LiveScoresView() {
   const { games, loading, error } = useMLBSchedule();
   const [expandedGamePk, setExpandedGamePk] = useState(null);
@@ -78,6 +86,7 @@ function GameCard({ game: g, expandedGamePk, setExpandedGamePk, onOpenHub }) {
   const isLive     = g.statusCode === 'I';
   const cls        = isLive ? 'live' : g.result === 'W' ? 'win' : g.result === 'L' ? 'loss' : 'upcoming';
   const isExpanded = expandedGamePk === g.gamePk;
+  const inningText = inningStatusText(g);
 
   return (
     <div className={`game-result-card ${cls} ${isExpanded ? 'expanded' : ''}`}>
@@ -85,7 +94,7 @@ function GameCard({ game: g, expandedGamePk, setExpandedGamePk, onOpenHub }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', width: '100%' }}>
           <div style={{ minWidth: 90 }}>
             {isLive
-              ? <span className="badge badge-live">🔴 LIVE {g.inning}{g.inningHalf === 'Top' ? '▲' : '▼'}</span>
+              ? <span className="badge badge-live">🔴 LIVE {inningText || `${g.inning}${g.inningHalf === 'Top' ? '▲' : '▼'}`}</span>
               : g.result
               ? <span className={`badge badge-${g.result === 'W' ? 'win' : 'loss'}`}>{g.result === 'W' ? '✓ WIN' : '✗ LOSS'}</span>
               : <span className="badge badge-limit">UPCOMING</span>
@@ -110,7 +119,9 @@ function GameCard({ game: g, expandedGamePk, setExpandedGamePk, onOpenHub }) {
               <div style={{ fontFamily: 'Bebas Neue', fontSize: '2rem', letterSpacing: '0.1em', color: g.result === 'W' ? 'var(--win)' : g.result === 'L' ? 'var(--loss)' : 'var(--text)', lineHeight: 1 }}>
                 {g.metsScore} – {g.oppScore}
               </div>
-              <div style={{ fontSize: '0.55rem', color: 'var(--muted)', letterSpacing: '0.1em', fontFamily: 'Oswald' }}>NYM – OPP</div>
+              <div style={{ fontSize: '0.55rem', color: 'var(--muted)', letterSpacing: '0.1em', fontFamily: 'Oswald' }}>
+                NYM – OPP{isLive && inningText ? ` · ${inningText}` : ''}
+              </div>
             </div>
           )}
 
