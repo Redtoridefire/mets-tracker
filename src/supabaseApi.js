@@ -1,6 +1,8 @@
 const SB_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SB_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const SESSION_KEY = 'metsHQ_supabase_session_v1';
+const SIGNED_URL_CACHE = new Map();
+let pendingAnonymousSession = null;
 
 function hasConfig() {
   return !!SB_URL && !!SB_ANON_KEY;
@@ -32,33 +34,57 @@ function isSessionValid(session) {
   return session.expires_at - now > 60;
 }
 
+async function fetchWithRetry(url, options = {}, retries = 2, delayMs = 350) {
+  let lastErr;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const resp = await fetch(url, options);
+      if (resp.ok || resp.status < 500) return resp;
+      lastErr = new Error(`HTTP ${resp.status}`);
+    } catch (e) {
+      lastErr = e;
+    }
+    if (i < retries) await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+  }
+  throw lastErr || new Error('Network request failed');
+}
+
 export async function ensureAnonymousSession() {
   if (!hasConfig()) throw new Error('Supabase config missing');
 
   const existing = readSession();
   if (isSessionValid(existing)) return existing;
+  if (pendingAnonymousSession) return pendingAnonymousSession;
 
-  const resp = await fetch(`${SB_URL}/auth/v1/signup`, {
-    method: 'POST',
-    headers: {
-      apikey: SB_ANON_KEY,
-      Authorization: `Bearer ${SB_ANON_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ data: { app: 'mets-hq' } }),
-  });
+  pendingAnonymousSession = (async () => {
+    const resp = await fetchWithRetry(`${SB_URL}/auth/v1/signup`, {
+      method: 'POST',
+      headers: {
+        apikey: SB_ANON_KEY,
+        Authorization: `Bearer ${SB_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ data: { app: 'mets-hq' } }),
+    });
 
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Auth failed (${resp.status}): ${text.slice(0, 120)}`);
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`Auth failed (${resp.status}): ${text.slice(0, 120)}`);
+    }
+
+    const json = await resp.json();
+    const session = json.session || json;
+    if (!session?.access_token || !session?.user?.id) throw new Error('No session returned. Enable Anonymous Sign-Ins in Supabase Auth settings.');
+
+    saveSession(session);
+    return session;
+  })();
+
+  try {
+    return await pendingAnonymousSession;
+  } finally {
+    pendingAnonymousSession = null;
   }
-
-  const json = await resp.json();
-  const session = json.session || json;
-  if (!session?.access_token || !session?.user?.id) throw new Error('No session returned. Enable Anonymous Sign-Ins in Supabase Auth settings.');
-
-  saveSession(session);
-  return session;
 }
 
 function authHeaders(accessToken, extra = {}) {
@@ -69,18 +95,22 @@ function authHeaders(accessToken, extra = {}) {
   };
 }
 
-export async function listMemoryPosts(limit = 40) {
+export async function listMemoryPosts(limit = 40, offset = 0) {
   const session = await ensureAnonymousSession();
-  const url = `${SB_URL}/rest/v1/memory_posts?select=id,user_id,image_path,caption,game_label,created_at&order=created_at.desc&limit=${limit}`;
-  const resp = await fetch(url, { headers: authHeaders(session.access_token) });
+  const url = `${SB_URL}/rest/v1/memory_posts?select=id,user_id,image_path,caption,game_label,created_at&order=created_at.desc&limit=${limit}&offset=${offset}`;
+  const resp = await fetchWithRetry(url, { headers: authHeaders(session.access_token) });
   if (!resp.ok) throw new Error(`Load failed (${resp.status})`);
   return resp.json();
 }
 
 export async function createSignedImageUrl(imagePath, expiresIn = 3600) {
+  const now = Date.now();
+  const cached = SIGNED_URL_CACHE.get(imagePath);
+  if (cached && cached.expiresAt > now + 60_000) return cached.url;
+
   const session = await ensureAnonymousSession();
   const path = imagePath.split('/').map(encodeURIComponent).join('/');
-  const resp = await fetch(`${SB_URL}/storage/v1/object/sign/memory-board/${path}`, {
+  const resp = await fetchWithRetry(`${SB_URL}/storage/v1/object/sign/memory-board/${path}`, {
     method: 'POST',
     headers: authHeaders(session.access_token, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({ expiresIn }),
@@ -89,7 +119,9 @@ export async function createSignedImageUrl(imagePath, expiresIn = 3600) {
   const json = await resp.json();
   const signed = json.signedURL || json.signedUrl;
   if (!signed) throw new Error('Missing signed URL');
-  return `${SB_URL}/storage/v1${signed}`;
+  const url = `${SB_URL}/storage/v1${signed}`;
+  SIGNED_URL_CACHE.set(imagePath, { url, expiresAt: now + (expiresIn * 1000) });
+  return url;
 }
 
 function sanitizeFileName(name) {
@@ -139,8 +171,6 @@ export async function uploadMemoryPost({ file, caption = '', gameLabel = '' }) {
   return row;
 }
 
-
-
 export async function getCurrentUserId() {
   const session = await ensureAnonymousSession();
   return session.user.id;
@@ -168,6 +198,8 @@ export async function deleteMemoryPost(post, opts = {}) {
     const text = await deleteObjResp.text();
     throw new Error(`Image delete failed (${deleteObjResp.status}): ${text.slice(0, 120)}`);
   }
+
+  SIGNED_URL_CACHE.delete(post.image_path);
 }
 
 export async function submitMemoryReport(postId, reason = '') {
@@ -193,15 +225,12 @@ export async function submitMemoryReport(postId, reason = '') {
   }
 }
 
-
-
 export async function listMemoryReports(limit = 80) {
   const session = await ensureAnonymousSession();
   const url = `${SB_URL}/rest/v1/memory_reports?select=id,post_id,reporter_id,reason,created_at,memory_posts(id,user_id,image_path,caption,game_label,created_at)&order=created_at.desc&limit=${limit}`;
-  const resp = await fetch(url, { headers: authHeaders(session.access_token) });
+  const resp = await fetchWithRetry(url, { headers: authHeaders(session.access_token) });
   if (!resp.ok) {
     const text = await resp.text();
-    // Backward-compatible fallback: older projects may not have memory_reports yet.
     if (resp.status === 404 || text.includes('PGRST205') || text.includes('memory_reports')) return [];
     throw new Error(`Report load failed (${resp.status}): ${text.slice(0, 120)}`);
   }

@@ -3,6 +3,7 @@ import { createSignedImageUrl, deleteMemoryPost, getCurrentUserId, getSupabaseSe
 
 const MAX_FILE_MB = 8;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+const PAGE_SIZE = 24;
 
 async function compressImageFile(file, maxEdge = 2200, quality = 0.82) {
   try {
@@ -38,32 +39,52 @@ export default function CorkBoardView() {
   const [deletingId, setDeletingId] = useState('');
   const [reportingId, setReportingId] = useState('');
   const [expandedPost, setExpandedPost] = useState(null);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const { configured } = getSupabaseSetupState();
 
-  const load = async () => {
+  const hydratePosts = async (rows, uid) => {
+    const hydrated = await Promise.all(rows.map(async row => {
+      try { return { ...row, signedUrl: await createSignedImageUrl(row.image_path), broken: false }; }
+      catch { return { ...row, signedUrl: '', broken: true }; }
+    }));
+
+    const brokenOwned = hydrated.filter(p => p.broken && p.user_id === uid);
+    if (brokenOwned.length > 0) {
+      await Promise.allSettled(brokenOwned.map(p => deleteMemoryPost(p, { bestEffortObjectDelete: true })));
+    }
+    return hydrated.filter(p => !p.broken);
+  };
+
+  const load = async (reset = true) => {
     try {
-      setLoading(true);
+      if (reset) setLoading(true); else setLoadingMore(true);
       setError(null);
-      const [uid, rows, reportRows] = await Promise.all([getCurrentUserId(), listMemoryPosts(48), listMemoryReports(120)]);
+
+      const baseOffset = reset ? 0 : offset;
+      const [uid, rows, reportRows] = await Promise.all([
+        getCurrentUserId(),
+        listMemoryPosts(PAGE_SIZE, baseOffset),
+        reset ? listMemoryReports(120) : Promise.resolve(reports),
+      ]);
+
       setCurrentUserId(uid);
-      setReports(reportRows || []);
+      if (reset) setReports(reportRows || []);
 
-      const hydrated = await Promise.all(rows.map(async row => {
-        try { return { ...row, signedUrl: await createSignedImageUrl(row.image_path), broken: false }; }
-        catch { return { ...row, signedUrl: '', broken: true }; }
-      }));
-
-      const brokenOwned = hydrated.filter(p => p.broken && p.user_id === uid);
-      if (brokenOwned.length > 0) {
-        await Promise.allSettled(brokenOwned.map(p => deleteMemoryPost(p, { bestEffortObjectDelete: true })));
-      }
-      setPosts(hydrated.filter(p => !p.broken));
+      const cleanPosts = await hydratePosts(rows, uid);
+      const merged = reset ? cleanPosts : [...posts, ...cleanPosts.filter(np => !posts.some(p => p.id === np.id))];
+      setPosts(merged);
+      setOffset(baseOffset + rows.length);
+      setHasMore(rows.length === PAGE_SIZE);
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
+
 
   const reportQueue = useMemo(() => {
     const grouped = new Map();
@@ -81,7 +102,7 @@ export default function CorkBoardView() {
 
   useEffect(() => {
     if (!configured) { setLoading(false); return; }
-    load();
+    load(true);
   }, [configured]);
 
   useEffect(() => {
@@ -100,7 +121,7 @@ export default function CorkBoardView() {
       setUploading(true); setError(null);
       await uploadMemoryPost({ file: await compressImageFile(file), caption, gameLabel });
       setCaption(''); setGameLabel(''); setFile(null);
-      await load();
+      await load(true);
     } catch (err) { setError(err.message); }
     finally { setUploading(false); }
   };
@@ -123,10 +144,16 @@ export default function CorkBoardView() {
     try {
       setReportingId(post.id); setError(null);
       await submitMemoryReport(post.id, reason);
-      await load();
+      await load(true);
       alert('Thanks — report submitted for review.');
     } catch (err) { setError(err.message); }
     finally { setReportingId(''); }
+  };
+
+
+  const onLoadMore = async () => {
+    if (!hasMore || loadingMore || loading) return;
+    await load(false);
   };
 
   return (
@@ -173,6 +200,13 @@ export default function CorkBoardView() {
                   </div>
                 </article>
               ))}
+            </div>
+          )}
+          {!loading && hasMore && (
+            <div style={{ marginTop: '0.9rem', textAlign: 'center' }}>
+              <button className="btn btn-outline" onClick={onLoadMore} disabled={loadingMore}>
+                {loadingMore ? 'Loading more…' : 'Load More Photos'}
+              </button>
             </div>
           )}
         </>

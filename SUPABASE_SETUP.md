@@ -144,6 +144,8 @@ using (
 - Broken image rows are hidden in-app, and broken rows owned by the current user are auto-cleaned from metadata on refresh.
 - Uploads are compressed client-side to reduce storage and bandwidth costs before upload.
 - Users can submit a simple report (`memory_reports`) on posts they do not own.
+- Board loading now uses paged fetches (Load More) to keep initial payloads lighter on large photo walls.
+- Signed image URLs are cached client-side in-memory briefly to reduce repeated sign requests.
 - If `memory_reports` has not been created yet, the app now gracefully falls back to an empty moderation queue (no board-breaking error).
 
 
