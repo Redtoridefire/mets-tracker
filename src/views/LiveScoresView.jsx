@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useMLBSchedule } from '../hooks.js';
 
+const GAME_FEED_CACHE = new Map();
+const GAME_FEED_TTL_MS = 60_000;
+
 export default function LiveScoresView() {
   const { games, loading, error } = useMLBSchedule();
   const [expandedGamePk, setExpandedGamePk] = useState(null);
@@ -235,6 +238,17 @@ function useGameFeed(gamePk) {
     setLoading(true);
     setError(null);
 
+    const cached = GAME_FEED_CACHE.get(gamePk);
+    if (cached && Date.now() - cached.ts < GAME_FEED_TTL_MS) {
+      setDetails(cached.data);
+      setLoading(false);
+      return () => {
+        cancelled = true;
+        controller.abort();
+        clearTimeout(timeout);
+      };
+    }
+
     fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`, {
       signal: controller.signal,
       credentials: 'omit',
@@ -248,7 +262,9 @@ function useGameFeed(gamePk) {
       })
       .then(json => {
         if (cancelled) return;
-        setDetails(parseGameDetails(json));
+        const parsed = parseGameDetails(json);
+        GAME_FEED_CACHE.set(gamePk, { data: parsed, ts: Date.now() });
+        setDetails(parsed);
         setLoading(false);
       })
       .catch(e => {

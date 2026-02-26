@@ -486,6 +486,7 @@ export function SeasonInsightsView({ userData }) {
   const totalSpent = attended.reduce((sum, p) => sum + (gameRecords[p.id]?.totalCost || 0), 0);
   const avgSpend = attended.length ? totalSpent / attended.length : 0;
   const promosCollected = attended.filter(p => gameRecords[p.id]?.promoCollected).length;
+  const winRate = attended.length ? Math.round((wins / attended.length) * 100) : 0;
 
   const byMonthMap = {};
   for (const p of attended) {
@@ -500,6 +501,7 @@ export function SeasonInsightsView({ userData }) {
   }
   const byMonth = Object.entries(byMonthMap).sort(([a],[b]) => a.localeCompare(b));
   const maxGamesInMonth = Math.max(1, ...byMonth.map(([,v]) => v.games));
+  const bestMonth = byMonth.length ? byMonth.reduce((best, cur) => cur[1].games > best[1].games ? cur : best) : null;
 
   return (
     <>
@@ -515,6 +517,8 @@ export function SeasonInsightsView({ userData }) {
         <div className="stat-card"><div className="big" style={{ color: 'var(--gold)', fontSize: '1.8rem' }}>${totalSpent.toFixed(0)}</div><div className="lbl">Total Spent</div></div>
         <div className="stat-card"><div className="big" style={{ color: 'var(--orange)', fontSize: '1.8rem' }}>${avgSpend.toFixed(0)}</div><div className="lbl">Avg / Game</div></div>
         <div className="stat-card"><div className="big">{promosCollected}</div><div className="lbl">Promos Collected</div></div>
+        <div className="stat-card"><div className="big" style={{ color: 'var(--win)' }}>{winRate}%</div><div className="lbl">Win Rate</div></div>
+        <div className="stat-card"><div className="big" style={{ color: 'var(--blue3)', fontSize: '1.7rem' }}>{bestMonth ? new Date(bestMonth[0] + '-01T12:00:00').toLocaleDateString('en-US', { month: 'short' }) : '—'}</div><div className="lbl">Best Month</div></div>
       </div>
 
       <div className="card">
