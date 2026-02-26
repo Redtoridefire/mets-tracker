@@ -146,7 +146,7 @@ export async function getCurrentUserId() {
   return session.user.id;
 }
 
-export async function deleteMemoryPost(post) {
+export async function deleteMemoryPost(post, opts = {}) {
   const session = await ensureAnonymousSession();
   if (!post?.id || !post?.image_path) throw new Error('Invalid post');
 
@@ -164,9 +164,32 @@ export async function deleteMemoryPost(post) {
     method: 'DELETE',
     headers: authHeaders(session.access_token),
   });
-  if (!deleteObjResp.ok) {
+  if (!deleteObjResp.ok && !opts.bestEffortObjectDelete) {
     const text = await deleteObjResp.text();
     throw new Error(`Image delete failed (${deleteObjResp.status}): ${text.slice(0, 120)}`);
+  }
+}
+
+export async function submitMemoryReport(postId, reason = '') {
+  const session = await ensureAnonymousSession();
+  if (!postId) throw new Error('Missing post id');
+
+  const resp = await fetch(`${SB_URL}/rest/v1/memory_reports`, {
+    method: 'POST',
+    headers: authHeaders(session.access_token, {
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    }),
+    body: JSON.stringify({
+      post_id: postId,
+      reporter_id: session.user.id,
+      reason: String(reason || '').slice(0, 250),
+    }),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Report failed (${resp.status}): ${text.slice(0, 120)}`);
   }
 }
 

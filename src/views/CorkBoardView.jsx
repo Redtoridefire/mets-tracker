@@ -1,8 +1,34 @@
 import { useEffect, useState } from 'react';
-import { createSignedImageUrl, deleteMemoryPost, getCurrentUserId, getSupabaseSetupState, listMemoryPosts, uploadMemoryPost } from '../supabaseApi.js';
+import { createSignedImageUrl, deleteMemoryPost, getCurrentUserId, getSupabaseSetupState, listMemoryPosts, submitMemoryReport, uploadMemoryPost } from '../supabaseApi.js';
 
 const MAX_FILE_MB = 8;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+
+async function compressImageFile(file, maxEdge = 2200, quality = 0.82) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    bitmap.close?.();
+
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+    if (!blob) return file;
+
+    const baseName = (file.name || 'upload').replace(/\.[^.]+$/, '');
+    return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+  } catch {
+    return file;
+  }
+}
 
 export default function CorkBoardView() {
   const [posts, setPosts] = useState([]);
@@ -14,6 +40,7 @@ export default function CorkBoardView() {
   const [file, setFile] = useState(null);
   const [currentUserId, setCurrentUserId] = useState('');
   const [deletingId, setDeletingId] = useState('');
+  const [reportingId, setReportingId] = useState('');
   const [expandedPost, setExpandedPost] = useState(null);
 
   const { configured } = getSupabaseSetupState();
@@ -24,17 +51,24 @@ export default function CorkBoardView() {
       setError(null);
       const [uid, rows] = await Promise.all([getCurrentUserId(), listMemoryPosts(48)]);
       setCurrentUserId(uid);
-      const withUrls = await Promise.all(
+
+      const hydrated = await Promise.all(
         rows.map(async row => {
           try {
             const signedUrl = await createSignedImageUrl(row.image_path);
-            return { ...row, signedUrl };
+            return { ...row, signedUrl, broken: false };
           } catch {
-            return { ...row, signedUrl: '' };
+            return { ...row, signedUrl: '', broken: true };
           }
         })
       );
-      setPosts(withUrls);
+
+      const brokenOwned = hydrated.filter(p => p.broken && p.user_id === uid);
+      if (brokenOwned.length > 0) {
+        await Promise.allSettled(brokenOwned.map(p => deleteMemoryPost(p, { bestEffortObjectDelete: true })));
+      }
+
+      setPosts(hydrated.filter(p => !p.broken));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -49,7 +83,6 @@ export default function CorkBoardView() {
     }
     load();
   }, [configured]);
-
 
   useEffect(() => {
     if (!expandedPost) return;
@@ -77,7 +110,8 @@ export default function CorkBoardView() {
     try {
       setUploading(true);
       setError(null);
-      await uploadMemoryPost({ file, caption, gameLabel });
+      const compressed = await compressImageFile(file);
+      await uploadMemoryPost({ file: compressed, caption, gameLabel });
       setCaption('');
       setGameLabel('');
       setFile(null);
@@ -102,6 +136,22 @@ export default function CorkBoardView() {
       setError(err.message);
     } finally {
       setDeletingId('');
+    }
+  };
+
+  const onReport = async post => {
+    if (!post || post.user_id === currentUserId) return;
+    const reason = prompt('Optional: Why are you reporting this image? (spam, offensive, etc.)') || '';
+
+    try {
+      setReportingId(post.id);
+      setError(null);
+      await submitMemoryReport(post.id, reason);
+      alert('Thanks — report submitted for review.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setReportingId('');
     }
   };
 
@@ -166,17 +216,28 @@ export default function CorkBoardView() {
                     {post.game_label && <div className="cork-game">{post.game_label}</div>}
                     {post.caption && <div className="cork-caption">{post.caption}</div>}
                     <div className="cork-date">{new Date(post.created_at).toLocaleString()}</div>
-                    {post.user_id === currentUserId && (
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-sm"
-                        style={{ marginTop: '0.45rem' }}
-                        onClick={() => onDelete(post)}
-                        disabled={deletingId === post.id}
-                      >
-                        {deletingId === post.id ? 'Deleting…' : '🗑️ Delete'}
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+                      {post.user_id === currentUserId && (
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          onClick={() => onDelete(post)}
+                          disabled={deletingId === post.id}
+                        >
+                          {deletingId === post.id ? 'Deleting…' : '🗑️ Delete'}
+                        </button>
+                      )}
+                      {post.user_id !== currentUserId && (
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          onClick={() => onReport(post)}
+                          disabled={reportingId === post.id}
+                        >
+                          {reportingId === post.id ? 'Reporting…' : '🚩 Report'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </article>
               ))}
@@ -184,7 +245,6 @@ export default function CorkBoardView() {
           )}
         </>
       )}
-
 
       {expandedPost?.signedUrl && (
         <div className="overlay" onClick={() => setExpandedPost(null)}>

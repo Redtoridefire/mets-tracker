@@ -66,6 +66,33 @@ for delete
 to authenticated
 using (auth.uid() = user_id);
 
+
+-- Moderation reports table (simple user report queue)
+create table if not exists public.memory_reports (
+  id uuid primary key default gen_random_uuid(),
+  post_id uuid not null references public.memory_posts(id) on delete cascade,
+  reporter_id uuid not null,
+  reason text not null default '' check (char_length(reason) <= 250),
+  created_at timestamptz not null default now(),
+  unique (post_id, reporter_id)
+);
+
+alter table public.memory_reports enable row level security;
+
+drop policy if exists "memory_reports_insert_own" on public.memory_reports;
+create policy "memory_reports_insert_own"
+on public.memory_reports
+for insert
+to authenticated
+with check (auth.uid() = reporter_id);
+
+drop policy if exists "memory_reports_select_own" on public.memory_reports;
+create policy "memory_reports_select_own"
+on public.memory_reports
+for select
+to authenticated
+using (auth.uid() = reporter_id);
+
 -- Storage bucket
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
@@ -114,3 +141,6 @@ using (
 - The app renders photos via **signed URLs** (short-lived links), not permanently public URLs.
 - No explicit login UI is required; users are automatically given an anonymous Supabase session.
 - The Cork Board delete button appears only on posts owned by the current anonymous user (`user_id = auth.uid()`).
+- Broken image rows are hidden in-app, and broken rows owned by the current user are auto-cleaned from metadata on refresh.
+- Uploads are compressed client-side to reduce storage and bandwidth costs before upload.
+- Users can submit a simple report (`memory_reports`) on posts they do not own.
