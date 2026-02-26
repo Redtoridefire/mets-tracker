@@ -1298,6 +1298,59 @@ const CSS = `
   .feed-article-desc    { font-size: 0.65rem; color: var(--muted); line-height: 1.5; margin-bottom: 0.3rem; }
   .feed-article-meta    { font-size: 0.55rem; color: var(--orange); font-family: 'Oswald', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
 
+
+  .feed-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.8rem;
+  }
+
+  .feed-chip {
+    border: 1px solid var(--border2);
+    background: rgba(0,45,92,0.45);
+    color: var(--text2);
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.56rem;
+    cursor: pointer;
+    font-family: 'Oswald', sans-serif;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .feed-chip.active {
+    border-color: rgba(255,89,16,0.5);
+    color: var(--orange2);
+    background: rgba(255,89,16,0.08);
+  }
+
+  .feed-count {
+    margin-left: auto;
+    font-size: 0.55rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .feed-bookmark {
+    border: 1px solid rgba(0,80,179,0.45);
+    background: rgba(0,45,92,0.45);
+    color: var(--text2);
+    border-radius: 4px;
+    min-width: 1.5rem;
+    height: 1.4rem;
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1;
+  }
+
+  .feed-bookmark.active {
+    border-color: rgba(255,204,0,0.55);
+    color: var(--gold);
+    background: rgba(255,204,0,0.12);
+  }
   .feed-error {
     background: var(--surface);
     border: 1px solid var(--border);
