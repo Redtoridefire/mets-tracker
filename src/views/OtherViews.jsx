@@ -51,7 +51,9 @@ function FullScheduleSection({ gameType, userData, onEditGame }) {
   }
 
   function monthLabel(key) {
-    const d = new Date(key + '-01');
+    const [year, month] = key.split('-').map(Number);
+    if (!year || !month) return key;
+    const d = new Date(year, month - 1, 1, 12, 0, 0);
     return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   }
 
