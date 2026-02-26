@@ -113,3 +113,4 @@ using (
 - Images are stored in a **private** bucket.
 - The app renders photos via **signed URLs** (short-lived links), not permanently public URLs.
 - No explicit login UI is required; users are automatically given an anonymous Supabase session.
+- The Cork Board delete button appears only on posts owned by the current anonymous user (`user_id = auth.uid()`).

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { createSignedImageUrl, getSupabaseSetupState, listMemoryPosts, uploadMemoryPost } from '../supabaseApi.js';
+import { createSignedImageUrl, deleteMemoryPost, getCurrentUserId, getSupabaseSetupState, listMemoryPosts, uploadMemoryPost } from '../supabaseApi.js';
 
 const MAX_FILE_MB = 8;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
@@ -12,6 +12,8 @@ export default function CorkBoardView() {
   const [caption, setCaption] = useState('');
   const [gameLabel, setGameLabel] = useState('');
   const [file, setFile] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState('');
+  const [deletingId, setDeletingId] = useState('');
 
   const { configured } = getSupabaseSetupState();
 
@@ -19,7 +21,8 @@ export default function CorkBoardView() {
     try {
       setLoading(true);
       setError(null);
-      const rows = await listMemoryPosts(48);
+      const [uid, rows] = await Promise.all([getCurrentUserId(), listMemoryPosts(48)]);
+      setCurrentUserId(uid);
       const withUrls = await Promise.all(
         rows.map(async row => {
           try {
@@ -72,6 +75,22 @@ export default function CorkBoardView() {
       setError(err.message);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const onDelete = async post => {
+    if (!post || post.user_id !== currentUserId) return;
+    if (!confirm('Delete this photo from the cork board?')) return;
+
+    try {
+      setDeletingId(post.id);
+      setError(null);
+      await deleteMemoryPost(post);
+      setPosts(prev => prev.filter(p => p.id !== post.id));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingId('');
     }
   };
 
@@ -136,6 +155,17 @@ export default function CorkBoardView() {
                     {post.game_label && <div className="cork-game">{post.game_label}</div>}
                     {post.caption && <div className="cork-caption">{post.caption}</div>}
                     <div className="cork-date">{new Date(post.created_at).toLocaleString()}</div>
+                    {post.user_id === currentUserId && (
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-sm"
+                        style={{ marginTop: '0.45rem' }}
+                        onClick={() => onDelete(post)}
+                        disabled={deletingId === post.id}
+                      >
+                        {deletingId === post.id ? 'Deleting…' : '🗑️ Delete'}
+                      </button>
+                    )}
                   </div>
                 </article>
               ))}

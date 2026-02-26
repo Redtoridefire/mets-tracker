@@ -139,6 +139,37 @@ export async function uploadMemoryPost({ file, caption = '', gameLabel = '' }) {
   return row;
 }
 
+
+
+export async function getCurrentUserId() {
+  const session = await ensureAnonymousSession();
+  return session.user.id;
+}
+
+export async function deleteMemoryPost(post) {
+  const session = await ensureAnonymousSession();
+  if (!post?.id || !post?.image_path) throw new Error('Invalid post');
+
+  const deleteRowResp = await fetch(`${SB_URL}/rest/v1/memory_posts?id=eq.${encodeURIComponent(post.id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(session.access_token, { Prefer: 'return=minimal' }),
+  });
+  if (!deleteRowResp.ok) {
+    const text = await deleteRowResp.text();
+    throw new Error(`Delete failed (${deleteRowResp.status}): ${text.slice(0, 120)}`);
+  }
+
+  const objectPath = post.image_path.split('/').map(encodeURIComponent).join('/');
+  const deleteObjResp = await fetch(`${SB_URL}/storage/v1/object/memory-board/${objectPath}`, {
+    method: 'DELETE',
+    headers: authHeaders(session.access_token),
+  });
+  if (!deleteObjResp.ok) {
+    const text = await deleteObjResp.text();
+    throw new Error(`Image delete failed (${deleteObjResp.status}): ${text.slice(0, 120)}`);
+  }
+}
+
 export function getSupabaseSetupState() {
   return { configured: hasConfig(), url: SB_URL };
 }
