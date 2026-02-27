@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react';
 import { PROMOS, EGGROLL_TEAMS } from '../data/promos.js';
-import { useMLBFullSchedule } from '../hooks.js';
+import { useMLBFullSchedule, useMLBGameDetail } from '../hooks.js';
 
 // ─── FULL SCHEDULE SECTION ────────────────────────────────────────────────────
 function FullScheduleSection({ gameType, userData, onEditGame }) {
   const { games, loading, error } = useMLBFullSchedule();
   const { gameRecords = {} }      = userData || {};
+  const [expandedGamePk, setExpandedGamePk] = useState(null);
+  const { linescore, loading: detailLoading } = useMLBGameDetail(expandedGamePk);
   const today = new Date().toISOString().slice(0, 10);
 
   const filtered = useMemo(() =>
@@ -13,7 +15,6 @@ function FullScheduleSection({ gameType, userData, onEditGame }) {
     [games, gameType]
   );
 
-  // Group by month
   const byMonth = useMemo(() => {
     const map = {};
     for (const g of filtered) {
@@ -73,6 +74,8 @@ function FullScheduleSection({ gameType, userData, onEditGame }) {
     </div>
   );
 
+  const selectedInnings = linescore?.innings || [];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {monthKeys.map(mKey => (
@@ -87,6 +90,7 @@ function FullScheduleSection({ gameType, userData, onEditGame }) {
               const recKey   = `mlb_${g.gamePk}`;
               const rec      = gameRecords[recKey] || {};
               const logged   = rec.attended || rec.planned;
+              const isExpanded = expandedGamePk === g.gamePk;
               const gameObj  = {
                 id: recKey, gamePk: g.gamePk,
                 emoji: g.isHome ? '🏟️' : '✈️',
@@ -95,27 +99,59 @@ function FullScheduleSection({ gameType, userData, onEditGame }) {
                 time: '', icon: '⚾', promo: gameType === 'S' ? 'Spring Training' : 'Regular Season',
               };
               return (
-                <div key={g.gamePk} className={`full-sched-row ${isToday ? 'full-sched-today' : ''} ${isPast ? 'full-sched-past' : ''}`}>
-                  <div className="fsr-date">{new Date(g.displayDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-                  <div className="fsr-matchup">
-                    <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'Oswald', marginRight: '0.3rem' }}>{g.isHome ? 'vs' : '@'}</span>
-                    <span style={{ fontFamily: 'Oswald', fontSize: '0.82rem', color: isPast ? 'var(--muted)' : 'var(--text)' }}>{g.oppName}</span>
-                    {g.broadcasts?.length > 0 && (
-                      <span className="fsr-broadcast">{g.broadcasts.slice(0, 2).join(' · ')}</span>
-                    )}
+                <div key={g.gamePk}>
+                  <div className={`full-sched-row ${isToday ? 'full-sched-today' : ''} ${isPast ? 'full-sched-past' : ''}`} onClick={() => setExpandedGamePk(isExpanded ? null : g.gamePk)} style={{ cursor: 'pointer' }}>
+                    <div className="fsr-date">{new Date(g.displayDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                    <div className="fsr-matchup">
+                      <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'Oswald', marginRight: '0.3rem' }}>{g.isHome ? 'vs' : '@'}</span>
+                      <span style={{ fontFamily: 'Oswald', fontSize: '0.82rem', color: isPast ? 'var(--muted)' : 'var(--text)' }}>{g.oppName}</span>
+                      {g.broadcasts?.length > 0 && (
+                        <span className="fsr-broadcast">{g.broadcasts.slice(0, 2).join(' · ')}</span>
+                      )}
+                    </div>
+                    <div className="fsr-venue" style={{ color: 'var(--muted)', fontSize: '0.6rem', fontFamily: 'DM Mono' }}>{g.isHome ? 'Citi Field' : g.venue?.split(',')[0]}</div>
+                    <div className="fsr-score">{scoreLabel(g)}</div>
+                    <div className="fsr-status">
+                      {statusLabel(g)}
+                      {onEditGame && (
+                        <button className={`btn btn-sm ${logged ? 'btn-outline' : 'btn-ghost'}`}
+                          style={{ fontSize: '0.5rem', padding: '0.15rem 0.4rem', marginLeft: '0.4rem', minHeight: 'unset' }}
+                          onClick={e => { e.stopPropagation(); onEditGame(gameObj); }}>
+                          {rec.attended ? '✏' : rec.planned ? '🎯' : '+'}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="fsr-venue" style={{ color: 'var(--muted)', fontSize: '0.6rem', fontFamily: 'DM Mono' }}>{g.isHome ? 'Citi Field' : g.venue?.split(',')[0]}</div>
-                  <div className="fsr-score">{scoreLabel(g)}</div>
-                  <div className="fsr-status">
-                    {statusLabel(g)}
-                    {onEditGame && (
-                      <button className={`btn btn-sm ${logged ? 'btn-outline' : 'btn-ghost'}`}
-                        style={{ fontSize: '0.5rem', padding: '0.15rem 0.4rem', marginLeft: '0.4rem', minHeight: 'unset' }}
-                        onClick={e => { e.stopPropagation(); onEditGame(gameObj); }}>
-                        {rec.attended ? '✏' : rec.planned ? '🎯' : '+'}
-                      </button>
-                    )}
-                  </div>
+
+                  {isExpanded && (
+                    <div className="game-drilldown-panel" style={{ marginTop: '0.35rem', marginBottom: '0.55rem' }}>
+                      <div className="card-title" style={{ marginBottom: '0.35rem' }}>Game Snapshot</div>
+                      <div style={{ fontSize: '0.62rem', color: 'var(--text2)', marginBottom: '0.35rem' }}>
+                        {g.status || 'Scheduled'} · {g.venue || (g.isHome ? 'Citi Field' : 'Away')} · {new Date(g.date).toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--muted)', marginBottom: '0.45rem' }}>
+                        {g.winPitch && <span style={{ marginRight: '0.7rem' }}>W: {g.winPitch}</span>}
+                        {g.losePitch && <span style={{ marginRight: '0.7rem' }}>L: {g.losePitch}</span>}
+                        {g.savePitch && <span>SV: {g.savePitch}</span>}
+                        {!g.winPitch && !g.losePitch && !g.savePitch && 'Pitching decisions will appear after game completion.'}
+                      </div>
+
+                      {detailLoading && <div className="game-drilldown-status">Loading inning linescore…</div>}
+                      {!detailLoading && selectedInnings.length > 0 && (
+                        <div className="inning-grid">
+                          {selectedInnings.map(i => (
+                            <div key={i.num} className="inning-chip">
+                              <div className="inning-chip-label">Inning {i.num}</div>
+                              <div className="inning-chip-score">NYM {g.isHome ? i.home?.runs ?? 0 : i.away?.runs ?? 0} · OPP {g.isHome ? i.away?.runs ?? 0 : i.home?.runs ?? 0}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {!detailLoading && selectedInnings.length === 0 && (
+                        <div className="game-drilldown-status">Detailed linescore not posted yet for this game.</div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

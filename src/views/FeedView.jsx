@@ -67,7 +67,7 @@ const TXN_LABELS = {
 };
 
 export default function FeedView() {
-  const { articles, loading: newsLoading, error: newsError, source } = useMetsNewsFeed();
+  const { articles, loading: newsLoading, error: newsError, source, refresh, lastUpdated } = useMetsNewsFeed();
   const { transactions, loading: txnLoading } = useMLBTransactions(30);
 
   const [bookmarks, setBookmarks] = useState(readBookmarks());
@@ -105,12 +105,28 @@ export default function FeedView() {
     <div>
       <div className="page-hdr">
         <div className="page-title">📰 Mets Feed</div>
-        <div className="page-sub">{source ? `Via ${source}` : 'SNY · Amazin\' Avenue · MLB.com · NY Post'} · Recent roster moves · No login required</div>
+        <div className="page-sub">{source ? `Via ${source}` : "SNY · Amazin' Avenue · MLB.com · NY Post"} · Recent roster moves · No login required</div>
       </div>
 
       <div className="feed-layout">
         <div className="feed-main">
-          <div className="card-title" style={{ marginBottom: '0.8rem' }}>⚾ Latest Mets News</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.8rem', flexWrap: 'wrap' }}>
+            <div className="card-title" style={{ marginBottom: 0 }}>⚾ Latest Mets News</div>
+            <button className="btn btn-outline btn-sm" onClick={refresh} disabled={newsLoading}>
+              {newsLoading ? 'Refreshing…' : '↻ Refresh'}
+            </button>
+            <div style={{ fontSize: '0.55rem', color: 'var(--muted)', fontFamily: 'DM Mono', marginLeft: 'auto' }}>
+              {lastUpdated ? `Last update: ${new Date(lastUpdated).toLocaleTimeString()}` : 'Live feed'}
+            </div>
+          </div>
+
+          {newsLoading && processed.length > 0 && (
+            <div className="card" style={{ marginBottom: '0.8rem', borderColor: 'rgba(255,89,16,0.25)', background: 'rgba(255,89,16,0.05)' }}>
+              <div style={{ fontSize: '0.62rem', color: 'var(--orange)', fontFamily: 'Oswald', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Updating feed… showing latest cached headlines while new items load.
+              </div>
+            </div>
+          )}
 
           {!newsLoading && !newsError && processed.length > 0 && (
             <div className="feed-toolbar">
@@ -121,7 +137,7 @@ export default function FeedView() {
             </div>
           )}
 
-          {newsLoading && (
+          {newsLoading && processed.length === 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>{[...Array(5)].map((_, i) => <div key={i} style={{ height: '90px', borderRadius: 8 }} className="loading-shimmer" />)}</div>
           )}
 
@@ -141,7 +157,10 @@ export default function FeedView() {
 
           {!newsLoading && shownArticles.map((a, i) => (
             <a key={`${a.normLink}-${i}`} href={a.link || '#'} target="_blank" rel="noopener noreferrer" className="feed-article">
-              {a.thumb && <img src={a.thumb} alt="" className="feed-thumb" onError={e => { e.target.style.display = 'none'; }} />}
+              {a.thumb
+                ? <img src={a.thumb} alt="" className="feed-thumb" onError={e => { e.currentTarget.style.display = 'none'; }} />
+                : <div className="feed-thumb" style={{ display: 'grid', placeItems: 'center', fontSize: '1.1rem', color: 'var(--text2)' }}>📰</div>
+              }
               <div className="feed-article-body">
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
                   <div className="feed-article-title">{a.title}</div>

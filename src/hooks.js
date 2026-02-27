@@ -431,17 +431,43 @@ export function useMLBTransactions(daysBack = 90) {
 // Feed priority: SNY → Amazin' Avenue → MLB.com
 // Each feed is tried via Strategy A first, then B, before moving to next feed.
 export function useMetsNewsFeed() {
-  const [articles, setArticles] = useState([]);
+  const STATIC_KEY = `${CACHE_PFX}metsnews_static_latest`;
+  const initCached = () => {
+    try {
+      const raw = localStorage.getItem(STATIC_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (parsed?.items?.length) return parsed;
+    } catch { /* ignore */ }
+    return null;
+  };
+
+  const cached = initCached();
+  const [articles, setArticles] = useState(cached?.items || []);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState(null);
-  const [source,   setSource]   = useState('');
+  const [source,   setSource]   = useState(cached?.label || '');
+  const [lastUpdated, setLastUpdated] = useState(cached?.ts || null);
+  const [refreshToken, setRefreshToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(null);
     const hourKey = new Date().toISOString().slice(0, 13);
+    const forceRefresh = refreshToken > 0;
 
-    // Parse raw RSS/Atom XML text → articles array
+    const extractThumbFromHtml = (html = '') => {
+      if (!html) return null;
+      try {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const img = doc.querySelector('img');
+        const src = img?.getAttribute('src') || '';
+        return src && /^https?:\/\//i.test(src) ? src : null;
+      } catch {
+        return null;
+      }
+    };
+
     const parseXML = (text) => {
       try {
         const xml  = new DOMParser().parseFromString(text, 'text/xml');
@@ -449,12 +475,13 @@ export function useMetsNewsFeed() {
         return items.slice(0, 20).map(el => {
           const t    = tag => el.querySelector(tag)?.textContent?.trim() || '';
           const attr = (sel, a) => { try { return el.querySelector(sel)?.getAttribute(a) || null; } catch { return null; } };
-          const thumb = attr('media\\:content', 'url') || attr('media\\:thumbnail', 'url') || attr('enclosure', 'url');
+          const rawDesc = t('description');
+          const thumb = attr('media\:content', 'url') || attr('media\:thumbnail', 'url') || attr('enclosure', 'url') || extractThumbFromHtml(rawDesc);
           const link  = t('link') || attr('link', 'href') || t('guid') || '';
           return {
             title:  t('title'),
             link,
-            desc:   t('description').replace(/<[^>]*>/g, '').trim().slice(0, 200),
+            desc:   rawDesc.replace(/<[^>]*>/g, '').trim().slice(0, 200),
             date:   t('pubDate') || t('published') || t('updated'),
             thumb,
             author: t('author') || t('creator'),
@@ -463,14 +490,15 @@ export function useMetsNewsFeed() {
       } catch { return []; }
     };
 
-    // Strategy A: allorigins raw proxy → DOMParser
     const viaAllorigins = async (feedUrl, cacheKey) => {
       const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(feedUrl)}`;
       const ck = `${CACHE_PFX}${cacheKey}_ao`;
       let text;
       try {
-        const cached = localStorage.getItem(ck);
-        if (cached) { const { data, ts } = JSON.parse(cached); if (Date.now() - ts < 600_000) text = data; }
+        if (!forceRefresh) {
+          const cached = localStorage.getItem(ck);
+          if (cached) { const { data, ts } = JSON.parse(cached); if (Date.now() - ts < 600_000) text = data; }
+        }
       } catch { /* ignore */ }
       if (!text) {
         const resp = await fetch(proxyUrl, { credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store', mode: 'cors' });
@@ -483,17 +511,16 @@ export function useMetsNewsFeed() {
       return items;
     };
 
-    // Strategy B: rss2json JSON API
     const viaRss2json = async (feedUrl, cacheKey) => {
       const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feedUrl)}`;
-      const json = await cachedFetch(`${cacheKey}_r2j_${hourKey}`, apiUrl, 600_000);
+      const json = await cachedFetch(`${cacheKey}_r2j_${hourKey}_${refreshToken}`, apiUrl, forceRefresh ? 1 : 600_000);
       if (json.status !== 'ok' || !json.items?.length) throw new Error('rss2json non-ok');
       return json.items.slice(0, 20).map(i => ({
         title:  i.title?.trim() || '',
         link:   i.link?.trim()  || '',
         desc:   (i.description || i.content || '').replace(/<[^>]*>/g, '').trim().slice(0, 200),
         date:   i.pubDate || '',
-        thumb:  i.thumbnail || i.enclosure?.link || null,
+        thumb:  i.thumbnail || i.enclosure?.link || extractThumbFromHtml(i.description || i.content || ''),
         author: i.author || '',
       })).filter(a => a.title && a.link);
     };
@@ -507,13 +534,11 @@ export function useMetsNewsFeed() {
 
     const run = async () => {
       for (const feed of FEEDS) {
-        // Try Strategy A (allorigins) first
         try {
           const items = await viaAllorigins(feed.url, `metsnews_${feed.key}_${hourKey}`);
           return { items, label: feed.label };
-        } catch { /* fall through to Strategy B */ }
+        } catch { /* fall through */ }
 
-        // Try Strategy B (rss2json)
         try {
           const items = await viaRss2json(feed.url, `metsnews_${feed.key}`);
           return { items, label: feed.label };
@@ -525,15 +550,25 @@ export function useMetsNewsFeed() {
     run()
       .then(({ items, label }) => {
         if (cancelled) return;
+        const ts = Date.now();
         setArticles(items);
         setSource(label);
+        setLastUpdated(ts);
         setLoading(false);
+        try { localStorage.setItem(STATIC_KEY, JSON.stringify({ items, label, ts })); } catch { /* ignore */ }
       })
-      .catch(e => { if (!cancelled) { setError(e.message); setLoading(false); } });
+      .catch(e => {
+        if (!cancelled) {
+          setError(e.message);
+          setLoading(false);
+        }
+      });
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshToken]);
 
-  return { articles, loading, error, source };
+  const refresh = () => setRefreshToken(v => v + 1);
+
+  return { articles, loading, error, source, refresh, lastUpdated };
 }
 
 // ─── MLB TEAM STATS HOOK ─────────────────────────────────────────────────────
