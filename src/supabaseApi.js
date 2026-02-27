@@ -95,9 +95,21 @@ function authHeaders(accessToken, extra = {}) {
   };
 }
 
-export async function listMemoryPosts(limit = 40, offset = 0) {
+
+function looksLikeMissingTable(respText = '') {
+  return respText.includes('PGRST205') || respText.includes('relation') || respText.includes('does not exist') || respText.includes('board_') || respText.includes('boards');
+}
+
+function makeInviteToken() {
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function listMemoryPosts(limit = 40, offset = 0, boardId = null) {
   const session = await ensureAnonymousSession();
-  const url = `${SB_URL}/rest/v1/memory_posts?select=id,user_id,image_path,caption,game_label,created_at&order=created_at.desc&limit=${limit}&offset=${offset}`;
+  const boardFilter = boardId ? `&board_id=eq.${encodeURIComponent(boardId)}` : '';
+  const url = `${SB_URL}/rest/v1/memory_posts?select=id,user_id,image_path,caption,game_label,created_at,board_id&order=created_at.desc&limit=${limit}&offset=${offset}${boardFilter}`;
   const resp = await fetchWithRetry(url, { headers: authHeaders(session.access_token) });
   if (!resp.ok) throw new Error(`Load failed (${resp.status})`);
   return resp.json();
@@ -128,7 +140,7 @@ function sanitizeFileName(name) {
   return String(name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-60);
 }
 
-export async function uploadMemoryPost({ file, caption = '', gameLabel = '' }) {
+export async function uploadMemoryPost({ file, caption = '', gameLabel = '', boardId = null }) {
   const session = await ensureAnonymousSession();
   const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
   const cleanName = sanitizeFileName(file.name).replace(/\.[^.]+$/, '');
@@ -159,6 +171,7 @@ export async function uploadMemoryPost({ file, caption = '', gameLabel = '' }) {
       image_path: objectPath,
       caption: caption.slice(0, 220),
       game_label: gameLabel.slice(0, 90),
+      ...(boardId ? { board_id: boardId } : {}),
     }),
   });
 
@@ -225,9 +238,10 @@ export async function submitMemoryReport(postId, reason = '') {
   }
 }
 
-export async function listMemoryReports(limit = 80) {
+export async function listMemoryReports(limit = 80, boardId = null) {
   const session = await ensureAnonymousSession();
-  const url = `${SB_URL}/rest/v1/memory_reports?select=id,post_id,reporter_id,reason,created_at,memory_posts(id,user_id,image_path,caption,game_label,created_at)&order=created_at.desc&limit=${limit}`;
+  const boardFilter = boardId ? `&memory_posts.board_id=eq.${encodeURIComponent(boardId)}` : '';
+  const url = `${SB_URL}/rest/v1/memory_reports?select=id,post_id,reporter_id,reason,created_at,memory_posts(id,user_id,image_path,caption,game_label,created_at,board_id)&order=created_at.desc&limit=${limit}${boardFilter}`;
   const resp = await fetchWithRetry(url, { headers: authHeaders(session.access_token) });
   if (!resp.ok) {
     const text = await resp.text();
@@ -239,4 +253,115 @@ export async function listMemoryReports(limit = 80) {
 
 export function getSupabaseSetupState() {
   return { configured: hasConfig(), url: SB_URL };
+}
+
+
+export async function listUserBoards() {
+  const session = await ensureAnonymousSession();
+  const uid = session.user.id;
+
+  const ownerResp = await fetchWithRetry(`${SB_URL}/rest/v1/boards?select=id,name,owner_id,created_at&owner_id=eq.${encodeURIComponent(uid)}&order=created_at.desc`, {
+    headers: authHeaders(session.access_token),
+  });
+  if (!ownerResp.ok) {
+    const text = await ownerResp.text();
+    if (ownerResp.status === 404 || looksLikeMissingTable(text)) return [];
+    throw new Error(`Boards load failed (${ownerResp.status}): ${text.slice(0, 120)}`);
+  }
+  const owners = await ownerResp.json();
+
+  const memberResp = await fetchWithRetry(`${SB_URL}/rest/v1/board_members?select=role,board:boards(id,name,owner_id,created_at)&user_id=eq.${encodeURIComponent(uid)}`, {
+    headers: authHeaders(session.access_token),
+  });
+  if (!memberResp.ok) {
+    const text = await memberResp.text();
+    if (memberResp.status === 404 || looksLikeMissingTable(text)) return owners.map(b => ({ ...b, myRole: 'owner' }));
+    throw new Error(`Board membership load failed (${memberResp.status}): ${text.slice(0, 120)}`);
+  }
+  const members = await memberResp.json();
+
+  const out = new Map();
+  owners.forEach(b => out.set(b.id, { ...b, myRole: 'owner' }));
+  members.forEach(m => {
+    if (!m.board?.id) return;
+    const prev = out.get(m.board.id);
+    if (prev) return;
+    out.set(m.board.id, { ...m.board, myRole: m.role || 'contributor' });
+  });
+  return Array.from(out.values()).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+
+export async function createBoard(name) {
+  const session = await ensureAnonymousSession();
+  const payload = {
+    owner_id: session.user.id,
+    name: String(name || 'Shared Board').slice(0, 80),
+  };
+  const resp = await fetch(`${SB_URL}/rest/v1/boards`, {
+    method: 'POST',
+    headers: authHeaders(session.access_token, { 'Content-Type': 'application/json', Prefer: 'return=representation' }),
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Create board failed (${resp.status}): ${text.slice(0, 120)}`);
+  }
+  const [row] = await resp.json();
+
+  await fetch(`${SB_URL}/rest/v1/board_members`, {
+    method: 'POST',
+    headers: authHeaders(session.access_token, { 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
+    body: JSON.stringify({ board_id: row.id, user_id: session.user.id, role: 'owner' }),
+  });
+  return { ...row, myRole: 'owner' };
+}
+
+export async function createBoardInvite(boardId, expiresHours = 72) {
+  const session = await ensureAnonymousSession();
+  const token = makeInviteToken();
+  const expiresAt = new Date(Date.now() + (Math.max(1, expiresHours) * 60 * 60 * 1000)).toISOString();
+
+  const resp = await fetch(`${SB_URL}/rest/v1/board_invites`, {
+    method: 'POST',
+    headers: authHeaders(session.access_token, { 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
+    body: JSON.stringify({ board_id: boardId, token, created_by: session.user.id, expires_at: expiresAt, used_count: 0 }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Invite create failed (${resp.status}): ${text.slice(0, 120)}`);
+  }
+  return token;
+}
+
+export async function acceptBoardInvite(token) {
+  const session = await ensureAnonymousSession();
+  const resp = await fetchWithRetry(`${SB_URL}/rest/v1/board_invites?select=id,board_id,expires_at,used_count,max_uses&token=eq.${encodeURIComponent(token)}&limit=1`, {
+    headers: authHeaders(session.access_token),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Invite lookup failed (${resp.status}): ${text.slice(0, 120)}`);
+  }
+  const [invite] = await resp.json();
+  if (!invite?.board_id) throw new Error('Invite link is invalid or expired.');
+  if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) throw new Error('Invite link expired.');
+  if (invite.max_uses && invite.used_count >= invite.max_uses) throw new Error('Invite link has reached max uses.');
+
+  const upsertMember = await fetch(`${SB_URL}/rest/v1/board_members`, {
+    method: 'POST',
+    headers: authHeaders(session.access_token, { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' }),
+    body: JSON.stringify({ board_id: invite.board_id, user_id: session.user.id, role: 'contributor' }),
+  });
+  if (!upsertMember.ok) {
+    const text = await upsertMember.text();
+    throw new Error(`Invite accept failed (${upsertMember.status}): ${text.slice(0, 120)}`);
+  }
+
+  await fetch(`${SB_URL}/rest/v1/board_invites?id=eq.${encodeURIComponent(invite.id)}`, {
+    method: 'PATCH',
+    headers: authHeaders(session.access_token, { 'Content-Type': 'application/json', Prefer: 'return=minimal' }),
+    body: JSON.stringify({ used_count: (invite.used_count || 0) + 1 }),
+  });
+
+  return invite.board_id;
 }

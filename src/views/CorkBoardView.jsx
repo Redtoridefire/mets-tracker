@@ -1,5 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createSignedImageUrl, deleteMemoryPost, getCurrentUserId, getSupabaseSetupState, listMemoryPosts, listMemoryReports, submitMemoryReport, uploadMemoryPost } from '../supabaseApi.js';
+import {
+  acceptBoardInvite,
+  createBoard,
+  createBoardInvite,
+  createSignedImageUrl,
+  deleteMemoryPost,
+  getCurrentUserId,
+  getSupabaseSetupState,
+  listMemoryPosts,
+  listMemoryReports,
+  listUserBoards,
+  submitMemoryReport,
+  uploadMemoryPost,
+} from '../supabaseApi.js';
 
 const MAX_FILE_MB = 8;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
@@ -42,37 +55,52 @@ export default function CorkBoardView() {
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [boards, setBoards] = useState([]);
+  const [activeBoardId, setActiveBoardId] = useState('');
+  const [boardName, setBoardName] = useState('');
+  const [creatingBoard, setCreatingBoard] = useState(false);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteLink, setInviteLink] = useState('');
   const { configured } = getSupabaseSetupState();
 
-  const hydratePosts = async (rows, uid) => {
+  const activeBoard = useMemo(() => boards.find(b => b.id === activeBoardId) || null, [boards, activeBoardId]);
+  const boardRole = activeBoard?.myRole || 'contributor';
+  const canAdminBoard = boardRole === 'owner';
+
+  const hydratePosts = async (rows, uid, ownerMode = false) => {
     const hydrated = await Promise.all(rows.map(async row => {
       try { return { ...row, signedUrl: await createSignedImageUrl(row.image_path), broken: false }; }
       catch { return { ...row, signedUrl: '', broken: true }; }
     }));
 
-    const brokenOwned = hydrated.filter(p => p.broken && p.user_id === uid);
+    const brokenOwned = hydrated.filter(p => p.broken && (p.user_id === uid || ownerMode));
     if (brokenOwned.length > 0) {
       await Promise.allSettled(brokenOwned.map(p => deleteMemoryPost(p, { bestEffortObjectDelete: true })));
     }
     return hydrated.filter(p => !p.broken);
   };
 
-  const load = async (reset = true) => {
+  const load = async (reset = true, boardIdOverride = null) => {
     try {
       if (reset) setLoading(true); else setLoadingMore(true);
       setError(null);
 
       const baseOffset = reset ? 0 : offset;
-      const [uid, rows, reportRows] = await Promise.all([
+      const boardId = boardIdOverride === null ? activeBoardId : boardIdOverride;
+      const [uid, boardRows, rows, reportRows] = await Promise.all([
         getCurrentUserId(),
-        listMemoryPosts(PAGE_SIZE, baseOffset),
-        reset ? listMemoryReports(120) : Promise.resolve(reports),
+        listUserBoards(),
+        listMemoryPosts(PAGE_SIZE, baseOffset, boardId || undefined),
+        reset ? listMemoryReports(120, boardId || undefined) : Promise.resolve(reports),
       ]);
 
       setCurrentUserId(uid);
+      setBoards(boardRows || []);
+      const nextBoardId = boardId || boardRows?.[0]?.id || '';
+      if (!boardId && nextBoardId !== activeBoardId) setActiveBoardId(nextBoardId);
       if (reset) setReports(reportRows || []);
 
-      const cleanPosts = await hydratePosts(rows, uid);
+      const cleanPosts = await hydratePosts(rows, uid, canAdminBoard);
       const merged = reset ? cleanPosts : [...posts, ...cleanPosts.filter(np => !posts.some(p => p.id === np.id))];
       setPosts(merged);
       setOffset(baseOffset + rows.length);
@@ -84,7 +112,6 @@ export default function CorkBoardView() {
       setLoadingMore(false);
     }
   };
-
 
   const reportQueue = useMemo(() => {
     const grouped = new Map();
@@ -103,7 +130,36 @@ export default function CorkBoardView() {
   useEffect(() => {
     if (!configured) { setLoading(false); return; }
     load(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configured]);
+
+  useEffect(() => {
+    if (!configured) return;
+    const token = new URLSearchParams(window.location.search).get('invite');
+    if (!token) return;
+    (async () => {
+      try {
+        setInviteBusy(true);
+        const boardId = await acceptBoardInvite(token);
+        const url = new URL(window.location.href);
+        url.searchParams.delete('invite');
+        window.history.replaceState({}, '', url.toString());
+        await load(true, boardId);
+        setActiveBoardId(boardId);
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setInviteBusy(false);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configured]);
+
+  useEffect(() => {
+    if (!configured || !activeBoardId) return;
+    load(true, activeBoardId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBoardId]);
 
   useEffect(() => {
     if (!expandedPost) return;
@@ -112,6 +168,39 @@ export default function CorkBoardView() {
     return () => window.removeEventListener('keydown', onKey);
   }, [expandedPost]);
 
+  const onCreateBoard = async e => {
+    e.preventDefault();
+    if (!boardName.trim()) return;
+    try {
+      setCreatingBoard(true);
+      const board = await createBoard(boardName.trim());
+      setBoardName('');
+      setActiveBoardId(board.id);
+      await load(true, board.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCreatingBoard(false);
+    }
+  };
+
+  const onCreateInvite = async () => {
+    if (!activeBoardId || !canAdminBoard) return;
+    try {
+      setInviteBusy(true);
+      const token = await createBoardInvite(activeBoardId);
+      const url = new URL(window.location.href);
+      url.searchParams.set('invite', token);
+      const link = url.toString();
+      setInviteLink(link);
+      try { await navigator.clipboard.writeText(link); } catch { /* ignore */ }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+
   const onUpload = async e => {
     e.preventDefault();
     if (!file) return;
@@ -119,15 +208,16 @@ export default function CorkBoardView() {
     if (file.size > MAX_FILE_MB * 1024 * 1024) return setError(`File too large. Max ${MAX_FILE_MB}MB.`);
     try {
       setUploading(true); setError(null);
-      await uploadMemoryPost({ file: await compressImageFile(file), caption, gameLabel });
+      await uploadMemoryPost({ file: await compressImageFile(file), caption, gameLabel, boardId: activeBoardId || undefined });
       setCaption(''); setGameLabel(''); setFile(null);
-      await load(true);
+      await load(true, activeBoardId);
     } catch (err) { setError(err.message); }
     finally { setUploading(false); }
   };
 
   const onDelete = async post => {
-    if (!post || post.user_id !== currentUserId) return;
+    const canDelete = post && (post.user_id === currentUserId || canAdminBoard);
+    if (!canDelete) return;
     if (!confirm('Delete this photo from the cork board?')) return;
     try {
       setDeletingId(post.id); setError(null);
@@ -144,23 +234,42 @@ export default function CorkBoardView() {
     try {
       setReportingId(post.id); setError(null);
       await submitMemoryReport(post.id, reason);
-      await load(true);
+      await load(true, activeBoardId);
       alert('Thanks — report submitted for review.');
     } catch (err) { setError(err.message); }
     finally { setReportingId(''); }
   };
 
-
   const onLoadMore = async () => {
     if (!hasMore || loadingMore || loading) return;
-    await load(false);
+    await load(false, activeBoardId);
   };
 
   return (
     <>
       <div className="page-hdr">
         <div className="page-title">📌 Mets Cork Board</div>
-        <div className="page-sub">Anonymous Uploads · Supabase Storage · Signed Photo URLs</div>
+        <div className="page-sub">Shared Boards · Invite Links · Owner/Admin or Uploader Delete</div>
+      </div>
+
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <div className="card-title">Board Access</div>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.6rem' }}>
+          <select value={activeBoardId} onChange={e => setActiveBoardId(e.target.value)} style={{ minWidth: 220 }}>
+            {boards.length === 0 && <option value="">Default Board (legacy)</option>}
+            {boards.map(b => <option key={b.id} value={b.id}>{b.name} · {b.myRole}</option>)}
+          </select>
+          <button className="btn btn-outline btn-sm" onClick={() => load(true, activeBoardId)} disabled={loading || inviteBusy}>Refresh</button>
+          {canAdminBoard && <button className="btn btn-primary btn-sm" onClick={onCreateInvite} disabled={inviteBusy}>{inviteBusy ? 'Creating…' : '🔗 Create Invite Link'}</button>}
+        </div>
+        {inviteLink && <div style={{ fontSize: '0.6rem', color: 'var(--text2)', wordBreak: 'break-all' }}>Invite link: {inviteLink}</div>}
+        <form onSubmit={onCreateBoard} style={{ marginTop: '0.7rem', display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <input value={boardName} onChange={e => setBoardName(e.target.value)} maxLength={80} placeholder="Create a new board name" style={{ minWidth: 220 }} />
+          <button className="btn btn-outline btn-sm" disabled={creatingBoard}>{creatingBoard ? 'Creating…' : '➕ Create Board'}</button>
+        </form>
+        <div style={{ marginTop: '0.5rem', fontSize: '0.58rem', color: 'var(--muted)' }}>
+          Contributors can upload + report. Uploaders can delete their own photos. Board owner can delete any photo.
+        </div>
       </div>
 
       <div className="sched-sub-tabs" style={{ marginBottom: '1rem' }}>
@@ -172,6 +281,7 @@ export default function CorkBoardView() {
 
       {configured && mode === 'board' && (
         <>
+          {inviteBusy && <div className="card" style={{ marginBottom: '1rem', fontSize: '0.66rem', color: 'var(--text2)' }}>Processing invite…</div>}
           <form className="card" onSubmit={onUpload} style={{ marginBottom: '1rem' }}>
             <div className="card-title">Upload Game Memory</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
@@ -186,20 +296,23 @@ export default function CorkBoardView() {
 
           {loading ? <div className="card" style={{ padding: '1.25rem', color: 'var(--muted)' }}>Loading board…</div> : (
             <div className="cork-grid">
-              {posts.map(post => (
-                <article key={post.id} className="cork-card">
-                  {post.signedUrl ? <img src={post.signedUrl} alt={post.caption || 'Mets game memory'} className="cork-photo" loading="lazy" onClick={() => setExpandedPost(post)} style={{ cursor: 'zoom-in' }} /> : <div className="cork-photo" style={{ display: 'grid', placeItems: 'center', color: 'var(--muted)', fontSize: '0.65rem' }}>Image unavailable</div>}
-                  <div className="cork-meta">
-                    {post.game_label && <div className="cork-game">{post.game_label}</div>}
-                    {post.caption && <div className="cork-caption">{post.caption}</div>}
-                    <div className="cork-date">{new Date(post.created_at).toLocaleString()}</div>
-                    <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
-                      {post.user_id === currentUserId && <button type="button" className="btn btn-danger btn-sm" onClick={() => onDelete(post)} disabled={deletingId === post.id}>{deletingId === post.id ? 'Deleting…' : '🗑️ Delete'}</button>}
-                      {post.user_id !== currentUserId && <button type="button" className="btn btn-outline btn-sm" onClick={() => onReport(post)} disabled={reportingId === post.id}>{reportingId === post.id ? 'Reporting…' : '🚩 Report'}</button>}
+              {posts.map(post => {
+                const canDelete = post.user_id === currentUserId || canAdminBoard;
+                return (
+                  <article key={post.id} className="cork-card">
+                    {post.signedUrl ? <img src={post.signedUrl} alt={post.caption || 'Mets game memory'} className="cork-photo" loading="lazy" onClick={() => setExpandedPost(post)} style={{ cursor: 'zoom-in' }} /> : <div className="cork-photo" style={{ display: 'grid', placeItems: 'center', color: 'var(--muted)', fontSize: '0.65rem' }}>Image unavailable</div>}
+                    <div className="cork-meta">
+                      {post.game_label && <div className="cork-game">{post.game_label}</div>}
+                      {post.caption && <div className="cork-caption">{post.caption}</div>}
+                      <div className="cork-date">{new Date(post.created_at).toLocaleString()}</div>
+                      <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+                        {canDelete && <button type="button" className="btn btn-danger btn-sm" onClick={() => onDelete(post)} disabled={deletingId === post.id}>{deletingId === post.id ? 'Deleting…' : '🗑️ Delete'}</button>}
+                        {!canDelete && <button type="button" className="btn btn-outline btn-sm" onClick={() => onReport(post)} disabled={reportingId === post.id}>{reportingId === post.id ? 'Reporting…' : '🚩 Report'}</button>}
+                      </div>
                     </div>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           )}
           {!loading && hasMore && (
@@ -215,7 +328,7 @@ export default function CorkBoardView() {
       {configured && mode === 'moderation' && (
         <div className="card">
           <div className="card-title">🛡️ Moderation Queue</div>
-          <div style={{ fontSize: '0.62rem', color: 'var(--muted)', marginBottom: '0.7rem' }}>Community-reported posts grouped by image. Remove your own post if needed.</div>
+          <div style={{ fontSize: '0.62rem', color: 'var(--muted)', marginBottom: '0.7rem' }}>Community-reported posts grouped by image. Board owners can remove any post.</div>
           {loading && <div className="game-drilldown-status">Loading moderation queue…</div>}
           {!loading && reportQueue.length === 0 && <div className="game-drilldown-status">No active reports right now.</div>}
           {!loading && reportQueue.length > 0 && (
@@ -230,10 +343,10 @@ export default function CorkBoardView() {
                       <div className="cork-date">Latest report: {new Date(item.latestAt).toLocaleString()}</div>
                       {item.reasons.length > 0 && <div style={{ marginTop: '0.25rem', fontSize: '0.58rem', color: 'var(--text2)' }}>Reasons: {item.reasons.slice(0, 3).join(' · ')}</div>}
                     </div>
-                    {item.post.user_id === currentUserId ? (
-                      <button className="btn btn-danger btn-sm" onClick={() => onDelete(item.post)} disabled={deletingId === item.post.id}>{deletingId === item.post.id ? 'Deleting…' : 'Remove My Post'}</button>
+                    {(item.post.user_id === currentUserId || canAdminBoard) ? (
+                      <button className="btn btn-danger btn-sm" onClick={() => onDelete(item.post)} disabled={deletingId === item.post.id}>{deletingId === item.post.id ? 'Deleting…' : 'Remove Post'}</button>
                     ) : (
-                      <span className="badge badge-limit">Owner action only</span>
+                      <span className="badge badge-limit">Owner/admin action only</span>
                     )}
                   </div>
                 </div>
