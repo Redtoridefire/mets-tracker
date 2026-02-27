@@ -26,8 +26,8 @@ export default function LiveScoresView() {
 
   const today    = new Date().toISOString().slice(0,10);
   const live     = games.filter(g => g.statusCode === 'I');
-  const recent   = games.filter(g => g.result !== null && g.displayDate < today).slice(0, 20);
-  const upcoming = games.filter(g => g.statusCode === 'S' || (!g.result && g.displayDate >= today)).slice(0, 10);
+  const recent   = games.filter(g => g.result !== null && g.displayDate <= today).slice(0, 20);
+  const upcoming = games.filter(g => g.statusCode === 'S' || (!g.result && g.displayDate > today)).slice(0, 10);
 
   return (
     <>
