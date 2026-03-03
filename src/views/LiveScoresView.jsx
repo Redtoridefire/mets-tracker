@@ -3,6 +3,7 @@ import { useMLBSchedule } from '../hooks.js';
 
 const GAME_FEED_CACHE = new Map();
 const GAME_FEED_TTL_MS = 60_000;
+const MAX_HIGHLIGHTS = 6;
 
 function inningStatusText(game) {
   if (game?.statusCode !== 'I') return '';
@@ -186,7 +187,7 @@ function GameHubOverlay({ game, onClose }) {
 }
 
 function GameHubBody({ details }) {
-  const { inningScoring, keyEvents, topPerformers } = details;
+  const { inningScoring, keyEvents, topPerformers, highlights } = details;
   return (
     <div>
       <div className="game-drilldown-grid">
@@ -224,6 +225,24 @@ function GameHubBody({ details }) {
           ))}
         </div>
       </div>
+      <div className="game-drilldown-panel" style={{ marginTop: '0.8rem' }}>
+        <div className="card-title" style={{ marginBottom: '0.45rem' }}>🎬 Video Highlights</div>
+        {highlights.length === 0 ? (
+          <div className="game-drilldown-status">No MLB highlight clips are available for this game yet.</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.7rem' }}>
+            {highlights.map(h => (
+              <div key={h.id} style={{ border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '0.5rem', background: 'rgba(0,0,0,0.22)' }}>
+                <video controls preload="metadata" poster={h.thumbnail || undefined} style={{ width: '100%', borderRadius: 6, background: '#000' }}>
+                  <source src={h.url} />
+                </video>
+                <div style={{ marginTop: '0.4rem', fontSize: '0.7rem', color: 'var(--text)' }}>{h.title}</div>
+                {h.duration && <div style={{ marginTop: '0.2rem', fontSize: '0.58rem', color: 'var(--muted)' }}>{h.duration}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -234,7 +253,7 @@ function GameDrillDown({ game }) {
   if (error) return <div className="game-drilldown-status" style={{ color: 'var(--loss)' }}>Could not load game feed: {error}</div>;
   if (!details) return <div className="game-drilldown-status">No feed details are available for this game yet.</div>;
 
-  const { inningScoring, keyEvents, topPerformers } = details;
+  const { inningScoring, keyEvents, topPerformers, highlights } = details;
   return (
     <div className="game-drilldown">
       <div className="game-drilldown-grid">
@@ -255,6 +274,19 @@ function GameDrillDown({ game }) {
         <div className="card-title" style={{ marginBottom: '0.4rem' }}>Play-by-Play Feed</div>
         {keyEvents.length === 0 ? <div className="game-drilldown-status">No scoring or major events yet.</div> : (
           <div className="event-feed">{keyEvents.map((event, idx) => <div key={`${event.inning}-${idx}`} className="event-item"><div className="event-meta">{event.half} {event.inning} · {event.result}</div><div className="event-text">{event.description}</div>{event.runners.length > 0 && <div className="event-runners">Scored: {event.runners.join(', ')}</div>}</div>)}</div>
+        )}
+      </div>
+      <div className="game-drilldown-panel" style={{ marginTop: '0.75rem' }}>
+        <div className="card-title" style={{ marginBottom: '0.4rem' }}>Video Highlights</div>
+        {highlights.length === 0 ? <div className="game-drilldown-status">No clips posted yet.</div> : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.6rem' }}>
+            {highlights.slice(0, 2).map(h => (
+              <a key={h.id} href={h.url} target="_blank" rel="noreferrer" style={{ color: 'var(--text)', textDecoration: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '0.45rem', background: 'rgba(0,0,0,0.2)' }}>
+                <div style={{ fontSize: '0.66rem' }}>🎬 {h.title}</div>
+                {h.duration && <div style={{ marginTop: '0.2rem', fontSize: '0.56rem', color: 'var(--muted)' }}>{h.duration}</div>}
+              </a>
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -285,20 +317,28 @@ function useGameFeed(gamePk) {
       };
     }
 
-    fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`, {
+    const requestOptions = {
       signal: controller.signal,
       credentials: 'omit',
       referrerPolicy: 'no-referrer',
       cache: 'no-store',
       mode: 'cors',
-    })
+    };
+
+    const feedPromise = fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`, requestOptions)
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
-      })
-      .then(json => {
+      });
+
+    const contentPromise = fetch(`https://statsapi.mlb.com/api/v1/game/${gamePk}/content`, requestOptions)
+      .then(r => (r.ok ? r.json() : null))
+      .catch(() => null);
+
+    Promise.all([feedPromise, contentPromise])
+      .then(([feedJson, contentJson]) => {
         if (cancelled) return;
-        const parsed = parseGameDetails(json);
+        const parsed = parseGameDetails(feedJson, contentJson);
         GAME_FEED_CACHE.set(gamePk, { data: parsed, ts: Date.now() });
         setDetails(parsed);
         setLoading(false);
@@ -321,7 +361,49 @@ function useGameFeed(gamePk) {
   return { details, loading, error };
 }
 
-function parseGameDetails(feed) {
+
+function pickHighlightUrl(playbacks = []) {
+  if (!Array.isArray(playbacks) || playbacks.length === 0) return null;
+  const scored = playbacks
+    .filter(p => p?.url)
+    .map(p => {
+      const name = String(p.name || '').toLowerCase();
+      let score = 0;
+      if (name.includes('mp4')) score += 4;
+      if (name.includes('1280') || name.includes('720')) score += 3;
+      if (name.includes('high') || name.includes('hq')) score += 2;
+      if (name.includes('hls') || name.includes('m3u8')) score -= 1;
+      return { score, url: p.url };
+    })
+    .sort((a, b) => b.score - a.score);
+  return scored[0]?.url || null;
+}
+
+function parseHighlights(content) {
+  const highlightItems = content?.highlights?.highlights?.items || [];
+  const alternateItems = (content?.media?.epgAlternate || []).flatMap(section => section?.items || []);
+  const items = [...highlightItems, ...alternateItems];
+
+  const seen = new Set();
+  const clips = [];
+  items.forEach((item, idx) => {
+    const url = pickHighlightUrl(item?.playbacks || []);
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+    const thumb = item?.image?.cuts?.[0]?.src || item?.image?.cuts?.[1]?.src || '';
+    clips.push({
+      id: item?.guid || item?.id || `${idx}_${url.slice(-12)}`,
+      title: item?.headline || item?.title || 'Game highlight',
+      duration: item?.duration || '',
+      thumbnail: thumb,
+      url,
+    });
+  });
+
+  return clips.slice(0, MAX_HIGHLIGHTS);
+}
+
+function parseGameDetails(feed, content) {
   const metsTeamId = feed?.gameData?.teams?.home?.name === 'New York Mets'
     ? feed?.gameData?.teams?.home?.id
     : feed?.gameData?.teams?.away?.name === 'New York Mets'
@@ -369,5 +451,10 @@ function parseGameDetails(feed) {
     });
   }
 
-  return { inningScoring, keyEvents, topPerformers: topPerformers.sort((a, b) => b.impact - a.impact).slice(0, 6) };
+  return {
+    inningScoring,
+    keyEvents,
+    highlights: parseHighlights(content),
+    topPerformers: topPerformers.sort((a, b) => b.impact - a.impact).slice(0, 6),
+  };
 }
