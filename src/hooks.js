@@ -152,7 +152,7 @@ export function useMLBSchedule() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(!cached?.items?.length || forceRefresh);
+    setLoading(true);
 
     const today = new Date();
     const start = new Date(today); start.setDate(start.getDate() - 14);
@@ -222,7 +222,7 @@ export function useMLBRoster() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(!cached?.items?.length || forceRefresh);
+    setLoading(true);
 
     const season = new Date().getFullYear();
 
@@ -354,7 +354,7 @@ export function useMLBFullSchedule() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(!cached?.items?.length || forceRefresh);
+    setLoading(true);
     const season   = new Date().getFullYear();
     const todayStr = new Date().toISOString().slice(0, 10);
     const forceRefresh = refreshToken > 0;
@@ -420,7 +420,7 @@ export function useMLBTransactions(daysBack = 90) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(!cached?.items?.length || forceRefresh);
+    setLoading(true);
     const today = new Date();
     const start = new Date(today);
     start.setDate(start.getDate() - daysBack);
@@ -464,7 +464,7 @@ export function useMetsNewsFeed() {
 
   const cached = initCached();
   const [articles, setArticles] = useState(cached?.items || []);
-  const [loading,  setLoading]  = useState(!cached?.items?.length);
+  const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState(null);
   const [source,   setSource]   = useState(cached?.label || '');
   const [lastUpdated, setLastUpdated] = useState(cached?.ts || null);
@@ -603,7 +603,7 @@ export function useMetsNewsFeed() {
 export function useMLBTeamStats() {
   const [batting,  setBatting]  = useState(null);
   const [pitching, setPitching] = useState(null);
-  const [loading,  setLoading]  = useState(!cached?.items?.length);
+  const [loading,  setLoading]  = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -641,7 +641,7 @@ export function useMLBGameDetail(gamePk) {
   useEffect(() => {
     if (!gamePk) return;
     let cancelled = false;
-    setLoading(!cached?.items?.length || forceRefresh);
+    setLoading(true);
     const url = `https://statsapi.mlb.com/api/v1/game/${gamePk}/linescore`;
     cachedFetch(`linescore_${gamePk}`, url, 300_000)
       .then(json => {
