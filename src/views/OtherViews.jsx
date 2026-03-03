@@ -4,14 +4,28 @@ import { useMLBFullSchedule, useMLBGameDetail } from '../hooks.js';
 
 // ─── FULL SCHEDULE SECTION ────────────────────────────────────────────────────
 function FullScheduleSection({ gameType, userData, onEditGame }) {
-  const { games, loading, error } = useMLBFullSchedule();
+  const { games, loading, error, refresh, lastUpdated } = useMLBFullSchedule();
   const { gameRecords = {} }      = userData || {};
   const [expandedGamePk, setExpandedGamePk] = useState(null);
   const { linescore, loading: detailLoading } = useMLBGameDetail(expandedGamePk);
   const today = new Date().toISOString().slice(0, 10);
 
   const filtered = useMemo(() =>
-    games.filter(g => g.gameType === gameType),
+    games.filter(g => {
+      const normalizedType = g.scheduleType || g.gameType;
+      if (gameType === 'S') {
+        if (normalizedType === 'S' || g.gameType === 'E') return true;
+        const month = new Date(g.date).getMonth() + 1;
+        const isSpringWindow = month >= 2 && month <= 3;
+        return normalizedType !== 'R' && isSpringWindow;
+      }
+      if (gameType === 'R') {
+        if (normalizedType === 'R') return true;
+        const month = new Date(g.date).getMonth() + 1;
+        return normalizedType !== 'S' && normalizedType !== 'E' && month >= 3;
+      }
+      return false;
+    }),
     [games, gameType]
   );
 
@@ -76,8 +90,18 @@ function FullScheduleSection({ gameType, userData, onEditGame }) {
 
   const selectedInnings = linescore?.innings || [];
 
+  const lastUpdatedLabel = lastUpdated
+    ? new Date(lastUpdated).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : '—';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem' }}>
+        <div style={{ color: 'var(--muted)', fontSize: '0.62rem' }}>Last updated: {lastUpdatedLabel}</div>
+        <button className="btn btn-outline btn-sm" onClick={refresh} disabled={loading}>
+          {loading ? 'Refreshing…' : '↻ Refresh'}
+        </button>
+      </div>
       {monthKeys.map(mKey => (
         <div key={mKey}>
           <div style={{ fontFamily: 'Oswald', fontSize: '0.65rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--orange)', marginBottom: '0.5rem', paddingBottom: '0.4rem', borderBottom: '1px solid rgba(255,89,16,0.2)' }}>

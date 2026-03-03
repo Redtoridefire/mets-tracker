@@ -330,24 +330,27 @@ export function useMLBStandings() {
 }
 
 // ─── FULL SEASON SCHEDULE HOOK ────────────────────────────────────────────────
-// Fetches Spring Training (S) + Regular Season (R) games for the full season.
+// Fetches Spring Training / Exhibition (S/E) + Regular Season (R) games.
 // Cached 15 minutes. Sorted ascending (oldest → newest) for schedule display.
 export function useMLBFullSchedule() {
   const [games,   setGames]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [refreshToken, setRefreshToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     const season   = new Date().getFullYear();
     const todayStr = new Date().toISOString().slice(0, 10);
+    const forceRefresh = refreshToken > 0;
     const url = `https://statsapi.mlb.com/api/v1/schedule?teamId=${METS_TEAM_ID}`
-      + `&sportId=1&season=${season}&gameTypes=S,R`
+      + `&sportId=1&season=${season}&gameTypes=S,E,R`
       + `&startDate=${season}-01-01&endDate=${season}-10-31`
       + `&hydrate=linescore,decisions,team,broadcasts`;
 
-    cachedFetch(`fullsched_${season}`, url, 900_000)
+    cachedFetch(`fullsched_${season}_${todayStr}_${refreshToken}`, url, forceRefresh ? 1 : 900_000)
       .then(json => {
         if (cancelled) return;
         const all = [];
@@ -356,6 +359,7 @@ export function useMLBFullSchedule() {
             const isHome = g.teams?.home?.team?.id === METS_TEAM_ID;
             const mets   = isHome ? g.teams?.home : g.teams?.away;
             const opp    = isHome ? g.teams?.away : g.teams?.home;
+            const normalizedType = (g.gameType === 'S' || g.gameType === 'E') ? 'S' : g.gameType;
             all.push({
               gamePk:      g.gamePk,
               date:        g.gameDate,
@@ -370,7 +374,8 @@ export function useMLBFullSchedule() {
               venue:       g.venue?.name || '',
               inning:      g.linescore?.currentInning,
               inningHalf:  g.linescore?.inningHalf,
-              gameType:    g.gameType,   // 'S' = Spring Training, 'R' = Regular Season
+              gameType:    g.gameType,
+              scheduleType: normalizedType, // 'S' = Spring/Exhibition, 'R' = Regular Season
               result:      mets?.isWinner === true ? 'W' : mets?.isWinner === false ? 'L' : null,
               winPitch:    g.decisions?.winner?.fullName,
               losePitch:   g.decisions?.loser?.fullName,
@@ -380,13 +385,16 @@ export function useMLBFullSchedule() {
           });
         });
         setGames(all.sort((a, b) => new Date(a.date) - new Date(b.date)));
+        setLastUpdated(Date.now());
         setLoading(false);
       })
       .catch(e => { if (!cancelled) { setError(e.message); setLoading(false); } });
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshToken]);
 
-  return { games, loading, error };
+  const refresh = () => setRefreshToken(v => v + 1);
+
+  return { games, loading, error, refresh, lastUpdated };
 }
 
 // ─── MLB TRANSACTIONS HOOK ────────────────────────────────────────────────────
