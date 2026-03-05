@@ -522,7 +522,15 @@ export function useMetsNewsFeed() {
         }
       } catch { /* ignore */ }
       if (!text) {
-        const resp = await fetch(proxyUrl, { credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store', mode: 'cors', signal: AbortSignal.timeout(8000) });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8_000);
+        const resp = await fetch(proxyUrl, {
+          signal: controller.signal,
+          credentials: 'omit',
+          referrerPolicy: 'no-referrer',
+          cache: 'no-store',
+          mode: 'cors',
+        }).finally(() => clearTimeout(timeout));
         if (!resp.ok) throw new Error(`allorigins ${resp.status}`);
         text = await resp.text();
         try { localStorage.setItem(ck, JSON.stringify({ data: text, ts: Date.now() })); } catch { /* full */ }
@@ -553,23 +561,29 @@ export function useMetsNewsFeed() {
       { url: 'https://nypost.com/sports/baseball/mets/feed/',     label: 'NY Post',        key: 'nypost' },
     ];
 
+    const trySequential = async (makeAttempts) => {
+      for (const makeAttempt of makeAttempts) {
+        try {
+          const result = await makeAttempt();
+          if (result?.items?.length) return result;
+        } catch { /* try next */ }
+      }
+      return null;
+    };
+
     const run = async () => {
-      const attempts = FEEDS.flatMap(feed => ([
-        () => viaAllorigins(feed.url, `metsnews_${feed.key}_${hourKey}`).then(items => ({ items, label: feed.label })),
-        () => viaRss2json(feed.url, `metsnews_${feed.key}`).then(items => ({ items, label: feed.label })),
-      ]));
-
-      const wrapped = attempts.map(makeAttempt =>
-        makeAttempt().catch(() => Promise.reject(new Error('source unavailable')))
+      const viaAllOriginsAttempts = FEEDS.map(feed =>
+        () => viaAllorigins(feed.url, `metsnews_${feed.key}_${hourKey}`).then(items => ({ items, label: feed.label }))
       );
+      const aoResult = await trySequential(viaAllOriginsAttempts);
+      if (aoResult) return aoResult;
 
-      if (typeof Promise.any === 'function') {
-        return Promise.any(wrapped);
-      }
+      const viaRss2jsonAttempts = FEEDS.map(feed =>
+        () => viaRss2json(feed.url, `metsnews_${feed.key}`).then(items => ({ items, label: feed.label }))
+      );
+      const r2jResult = await trySequential(viaRss2jsonAttempts);
+      if (r2jResult) return r2jResult;
 
-      for (const makeAttempt of attempts) {
-        try { return await makeAttempt(); } catch { /* continue */ }
-      }
       throw new Error('All sources unavailable');
     };
 
@@ -585,7 +599,7 @@ export function useMetsNewsFeed() {
       })
       .catch(e => {
         if (!cancelled) {
-          setError(e.message);
+          setError(cached?.items?.length ? `Live refresh failed (${e.message}); showing cached feed.` : e.message);
           setLoading(false);
         }
       });
