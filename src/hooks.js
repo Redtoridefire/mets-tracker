@@ -210,6 +210,65 @@ export function useMLBSchedule() {
   return { games, loading, error };
 }
 
+// ─── WORLD BASEBALL CLASSIC SCHEDULE HOOK ───────────────────────────────────
+// sportId=51 (WBC/International). Cached 5 minutes.
+export function useWBCSchedule() {
+  const [games, setGames] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [refreshToken, setRefreshToken] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const year = new Date().getFullYear();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const forceRefresh = refreshToken > 0;
+    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=51`
+      + `&startDate=${year}-01-01&endDate=${year}-12-31`
+      + `&hydrate=linescore,team,broadcasts`;
+
+    cachedFetch(`wbc_${year}_${todayStr}_${refreshToken}`, url, forceRefresh ? 1 : 300_000)
+      .then(json => {
+        if (cancelled) return;
+        const parsed = [];
+        (json.dates || []).forEach(date => {
+          (date.games || []).forEach(g => {
+            const home = g.teams?.home;
+            const away = g.teams?.away;
+            parsed.push({
+              gamePk: g.gamePk,
+              date: g.gameDate,
+              displayDate: date.date,
+              status: g.status?.detailedState || '',
+              statusCode: g.status?.statusCode || '',
+              gameType: g.gameType || '',
+              homeName: home?.team?.name || 'Home',
+              awayName: away?.team?.name || 'Away',
+              homeScore: home?.score,
+              awayScore: away?.score,
+              venue: g.venue?.name || '',
+              broadcasts: (g.broadcasts || []).filter(b => b.type === 'TV').map(b => b.name),
+            });
+          });
+        });
+        setGames(parsed.sort((a, b) => new Date(a.date) - new Date(b.date)));
+        setLastUpdated(Date.now());
+        setLoading(false);
+      })
+      .catch(e => {
+        if (!cancelled) { setError(e.message); setLoading(false); }
+      });
+
+    return () => { cancelled = true; };
+  }, [refreshToken]);
+
+  const refresh = () => setRefreshToken(v => v + 1);
+
+  return { games, loading, error, refresh, lastUpdated };
+}
+
 // ─── MLB ROSTER + STATS HOOK ─────────────────────────────────────────────────
 // Roster cached 6h. Individual player stats cached 2h. Bio data cached 24h.
 export function useMLBRoster() {

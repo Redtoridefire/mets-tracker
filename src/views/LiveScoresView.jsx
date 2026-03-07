@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useMLBSchedule } from '../hooks.js';
+import { useMLBSchedule, useWBCSchedule } from '../hooks.js';
 
 const GAME_FEED_CACHE = new Map();
 const GAME_FEED_TTL_MS = 60_000;
@@ -13,6 +13,11 @@ function inningStatusText(game) {
   return half ? `${half} ${inning}` : `Inning ${inning}`;
 }
 
+
+function isFinalStatus(statusCode = '') {
+  return ['F', 'FO', 'FT', 'FR', 'FG', 'O'].includes(statusCode);
+}
+
 function gameStatusDetail(game) {
   if (game?.statusCode === 'I') return inningStatusText(game);
   if (game?.result === 'W' || game?.result === 'L') return 'Final';
@@ -22,6 +27,7 @@ function gameStatusDetail(game) {
 
 export default function LiveScoresView() {
   const { games, loading, error } = useMLBSchedule();
+  const { games: wbcGames, loading: wbcLoading, error: wbcError } = useWBCSchedule();
   const [expandedGamePk, setExpandedGamePk] = useState(null);
   const [hubGame, setHubGame] = useState(null);
 
@@ -29,6 +35,10 @@ export default function LiveScoresView() {
   const live     = games.filter(g => g.statusCode === 'I');
   const recent   = games.filter(g => g.result !== null && g.displayDate <= today).slice(0, 20);
   const upcoming = games.filter(g => g.statusCode === 'S' || (!g.result && g.displayDate > today)).slice(0, 10);
+
+  const wbcLive = wbcGames.filter(g => g.statusCode === 'I');
+  const wbcFinal = wbcGames.filter(g => isFinalStatus(g.statusCode)).slice(-12).reverse();
+  const wbcUpcoming = wbcGames.filter(g => !isFinalStatus(g.statusCode) && g.statusCode !== 'I').slice(0, 12);
 
   return (
     <>
@@ -98,7 +108,88 @@ export default function LiveScoresView() {
           </div>
         </div>
       )}
+      <div style={{ height: '2rem' }} />
+      <div className="card-title" style={{ marginBottom: '0.75rem' }}>🌍 World Baseball Classic</div>
+
+      {wbcLoading && (
+        <div className="card" style={{ padding: '1rem', marginBottom: '1rem', textAlign: 'center', color: 'var(--muted)' }}>
+          Loading WBC games…
+        </div>
+      )}
+
+      {wbcError && (
+        <div className="card" style={{ marginBottom: '1rem', borderColor: 'rgba(255,68,68,0.3)' }}>
+          <div style={{ color: 'var(--loss)', fontSize: '0.75rem' }}>⚠️ Could not load WBC games: {wbcError}</div>
+        </div>
+      )}
+
+      {!wbcLoading && wbcLive.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+          {wbcLive.map(g => <WBCGameCard key={`wbc_live_${g.gamePk}`} game={g} />)}
+        </div>
+      )}
+
+      {!wbcLoading && wbcFinal.length > 0 && (
+        <>
+          <div style={{ fontFamily: 'Oswald', fontSize: '0.68rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--orange)', marginBottom: '0.45rem' }}>Recent WBC Results</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+            {wbcFinal.map(g => <WBCGameCard key={`wbc_final_${g.gamePk}`} game={g} />)}
+          </div>
+        </>
+      )}
+
+      {!wbcLoading && wbcUpcoming.length > 0 && (
+        <>
+          <div style={{ fontFamily: 'Oswald', fontSize: '0.68rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--orange)', marginBottom: '0.45rem' }}>Upcoming WBC Games</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {wbcUpcoming.map(g => <WBCGameCard key={`wbc_upcoming_${g.gamePk}`} game={g} />)}
+          </div>
+        </>
+      )}
+
     </>
+  );
+}
+
+
+function WBCGameCard({ game: g }) {
+  const isLive = g.statusCode === 'I';
+  const final = isFinalStatus(g.statusCode);
+
+  return (
+    <div className={`game-result-card ${isLive ? 'live' : final ? 'win' : 'upcoming'}`}>
+      <div className="game-card-toggle" style={{ cursor: 'default' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', width: '100%' }}>
+          <div style={{ minWidth: 110 }}>
+            {isLive
+              ? <span className="badge badge-live">🔴 LIVE</span>
+              : final
+              ? <span className="badge badge-win">FINAL</span>
+              : <span className="badge badge-limit">UPCOMING</span>
+            }
+          </div>
+          <div style={{ flex: 1, textAlign: 'left' }}>
+            <div style={{ fontFamily: 'Oswald', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'white' }}>
+              {g.awayName} @ {g.homeName}
+            </div>
+            <div style={{ fontSize: '0.6rem', color: 'var(--muted)', marginTop: '0.2rem' }}>
+              {new Date(g.date).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' })}
+              {g.venue && ` · ${g.venue}`}
+            </div>
+          </div>
+          {(g.awayScore !== undefined || g.homeScore !== undefined) && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: 'Bebas Neue', fontSize: '1.7rem', letterSpacing: '0.1em', color: 'var(--text)', lineHeight: 1 }}>
+                {g.awayScore ?? '–'} – {g.homeScore ?? '–'}
+              </div>
+              <div style={{ fontSize: '0.5rem', color: 'var(--muted)', letterSpacing: '0.08em', fontFamily: 'Oswald' }}>
+                AWAY – HOME
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

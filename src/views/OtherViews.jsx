@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { PROMOS, EGGROLL_TEAMS } from '../data/promos.js';
-import { useMLBFullSchedule, useMLBGameDetail } from '../hooks.js';
+import { useMLBFullSchedule, useMLBGameDetail, useWBCSchedule } from '../hooks.js';
 
 // ─── FULL SCHEDULE SECTION ────────────────────────────────────────────────────
 function FullScheduleSection({ gameType, userData, onEditGame }) {
@@ -186,12 +186,88 @@ function FullScheduleSection({ gameType, userData, onEditGame }) {
   );
 }
 
+
+function WBCScheduleSection() {
+  const { games, loading, error, refresh, lastUpdated } = useWBCSchedule();
+
+  const byMonth = useMemo(() => {
+    const map = {};
+    games.forEach(g => {
+      const key = g.displayDate?.slice(0, 7) || 'Unknown';
+      if (!map[key]) map[key] = [];
+      map[key].push(g);
+    });
+    return map;
+  }, [games]);
+
+  const monthKeys = Object.keys(byMonth).sort();
+  const finalCodes = new Set(['F', 'FO', 'FT', 'FR', 'FG', 'O']);
+
+  const lastUpdatedLabel = lastUpdated
+    ? new Date(lastUpdated).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : '—';
+
+  function monthLabel(key) {
+    const [year, month] = key.split('-').map(Number);
+    if (!year || !month) return key;
+    const d = new Date(year, month - 1, 1, 12, 0, 0);
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+
+  if (loading) return <div style={{ padding: '1.2rem', color: 'var(--muted)' }}>Loading WBC schedule…</div>;
+  if (error) return <div style={{ padding: '1rem', color: 'var(--loss)' }}>⚠ Could not load WBC schedule: {error}</div>;
+  if (!games.length) return <div style={{ padding: '1rem', color: 'var(--muted)' }}>No World Baseball Classic games found for this year yet.</div>;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem' }}>
+        <div style={{ color: 'var(--muted)', fontSize: '0.62rem' }}>Last updated: {lastUpdatedLabel}</div>
+        <button className="btn btn-outline btn-sm" onClick={refresh} disabled={loading}>↻ Refresh</button>
+      </div>
+
+      {monthKeys.map(mKey => (
+        <div key={mKey}>
+          <div style={{ fontFamily: 'Oswald', fontSize: '0.65rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--orange)', marginBottom: '0.5rem', paddingBottom: '0.4rem', borderBottom: '1px solid rgba(255,89,16,0.2)' }}>
+            {monthLabel(mKey)} ({byMonth[mKey].length} games)
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+            {byMonth[mKey].map(g => {
+              const isLive = g.statusCode === 'I';
+              const isFinal = finalCodes.has(g.statusCode);
+              return (
+                <div key={g.gamePk} className={`full-sched-row ${isLive ? 'full-sched-today' : ''}`}>
+                  <div className="fsr-date">{new Date(g.displayDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                  <div className="fsr-matchup">
+                    <span style={{ fontFamily: 'Oswald', fontSize: '0.82rem' }}>{g.awayName} @ {g.homeName}</span>
+                    {g.broadcasts?.length > 0 && <span className="fsr-broadcast">{g.broadcasts.slice(0, 2).join(' · ')}</span>}
+                  </div>
+                  <div className="fsr-venue" style={{ color: 'var(--muted)', fontSize: '0.6rem', fontFamily: 'DM Mono' }}>{g.venue || 'TBD'}</div>
+                  <div className="fsr-score">
+                    {(g.awayScore !== undefined || g.homeScore !== undefined) && (
+                      <span style={{ fontFamily: 'Bebas Neue', fontSize: '1rem', color: 'var(--text)' }}>{g.awayScore ?? '–'}–{g.homeScore ?? '–'}</span>
+                    )}
+                  </div>
+                  <div className="fsr-status">
+                    {isLive && <span className="badge badge-live">LIVE</span>}
+                    {isFinal && <span className="badge badge-win">Final</span>}
+                    {!isLive && !isFinal && <span style={{ color: 'var(--muted)', fontSize: '0.62rem' }}>Scheduled</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── SCHEDULE VIEW ────────────────────────────────────────────────────────────
 export function ScheduleView({ userData, onEditGame }) {
   const { gameRecords = {} } = userData;
   const today = new Date().toISOString().slice(0, 10);
   const [expandedId, setExpandedId] = useState(null);
-  const [schedMode, setSchedMode]   = useState('promo'); // 'promo' | 'spring' | 'regular'
+  const [schedMode, setSchedMode]   = useState('promo'); // 'promo' | 'spring' | 'regular' | 'wbc'
 
   const toggleExpand = id => setExpandedId(prev => prev === id ? null : id);
 
@@ -217,6 +293,9 @@ export function ScheduleView({ userData, onEditGame }) {
         <button className={`sst-btn ${schedMode === 'regular' ? 'active' : ''}`} onClick={() => setSchedMode('regular')}>
           📅 Regular Season
         </button>
+        <button className={`sst-btn ${schedMode === 'wbc' ? 'active' : ''}`} onClick={() => setSchedMode('wbc')}>
+          🌍 WBC
+        </button>
       </div>
 
       {schedMode === 'spring' && (
@@ -228,6 +307,12 @@ export function ScheduleView({ userData, onEditGame }) {
       {schedMode === 'regular' && (
         <div className="card">
           <FullScheduleSection gameType="R" userData={userData} onEditGame={onEditGame} />
+        </div>
+      )}
+
+      {schedMode === 'wbc' && (
+        <div className="card">
+          <WBCScheduleSection />
         </div>
       )}
 
