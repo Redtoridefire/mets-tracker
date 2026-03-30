@@ -111,7 +111,10 @@ export async function listMemoryPosts(limit = 40, offset = 0, boardId = null) {
   const boardFilter = boardId ? `&board_id=eq.${encodeURIComponent(boardId)}` : '';
   const url = `${SB_URL}/rest/v1/memory_posts?select=id,user_id,image_path,caption,game_label,created_at,board_id&order=created_at.desc&limit=${limit}&offset=${offset}${boardFilter}`;
   const resp = await fetchWithRetry(url, { headers: authHeaders(session.access_token) });
-  if (!resp.ok) throw new Error(`Load failed (${resp.status})`);
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Load failed (${resp.status}): ${text.slice(0, 160)}`);
+  }
   return resp.json();
 }
 

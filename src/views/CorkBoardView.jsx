@@ -15,27 +15,78 @@ import {
 } from '../supabaseApi.js';
 
 const MAX_FILE_MB = 8;
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
 const PAGE_SIZE = 24;
+
+
+function inferMimeType(file) {
+  const explicit = (file?.type || '').toLowerCase();
+  if (explicit) return explicit;
+  const ext = String(file?.name || '').split('.').pop()?.toLowerCase() || '';
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'heic') return 'image/heic';
+  if (ext === 'heif') return 'image/heif';
+  return '';
+}
+
+async function decodeImageToCanvas(file, maxEdge) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close?.();
+  return canvas;
+}
+
+async function decodeImageFallback(file, maxEdge) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.max(1, Math.round(img.naturalWidth * scale));
+      const h = Math.max(1, Math.round(img.naturalHeight * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      URL.revokeObjectURL(url);
+      if (!ctx) return resolve(null);
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Image decode failed'));
+    };
+    img.src = url;
+  });
+}
 
 async function compressImageFile(file, maxEdge = 2200, quality = 0.82) {
   try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
-    const w = Math.max(1, Math.round(bitmap.width * scale));
-    const h = Math.max(1, Math.round(bitmap.height * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return file;
-    ctx.drawImage(bitmap, 0, 0, w, h);
-    bitmap.close?.();
+    let canvas = null;
+    try {
+      canvas = await decodeImageToCanvas(file, maxEdge);
+    } catch {
+      canvas = await decodeImageFallback(file, maxEdge);
+    }
+    if (!canvas) return file;
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
     if (!blob) return file;
     const baseName = (file.name || 'upload').replace(/\.[^.]+$/, '');
     return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
-  } catch { return file; }
+  } catch {
+    return file;
+  }
 }
 
 export default function CorkBoardView() {
@@ -204,7 +255,8 @@ export default function CorkBoardView() {
   const onUpload = async e => {
     e.preventDefault();
     if (!file) return;
-    if (!ALLOWED_TYPES.includes(file.type)) return setError('Unsupported file type. Use JPG, PNG, WEBP, or HEIC.');
+    const detectedType = inferMimeType(file);
+    if (!ALLOWED_TYPES.has(detectedType)) return setError('Unsupported file type. Use JPG, PNG, WEBP, or HEIC.');
     if (file.size > MAX_FILE_MB * 1024 * 1024) return setError(`File too large. Max ${MAX_FILE_MB}MB.`);
     try {
       setUploading(true); setError(null);
