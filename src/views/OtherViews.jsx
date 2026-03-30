@@ -1,19 +1,34 @@
 import { useState, useMemo } from 'react';
 import { PROMOS, EGGROLL_TEAMS } from '../data/promos.js';
-import { useMLBFullSchedule } from '../hooks.js';
+import { useMLBFullSchedule, useMLBGameDetail, useWBCSchedule } from '../hooks.js';
 
 // ─── FULL SCHEDULE SECTION ────────────────────────────────────────────────────
 function FullScheduleSection({ gameType, userData, onEditGame }) {
-  const { games, loading, error } = useMLBFullSchedule();
+  const { games, loading, error, refresh, lastUpdated } = useMLBFullSchedule();
   const { gameRecords = {} }      = userData || {};
+  const [expandedGamePk, setExpandedGamePk] = useState(null);
+  const { linescore, loading: detailLoading } = useMLBGameDetail(expandedGamePk);
   const today = new Date().toISOString().slice(0, 10);
 
   const filtered = useMemo(() =>
-    games.filter(g => g.gameType === gameType),
+    games.filter(g => {
+      const normalizedType = g.scheduleType || g.gameType;
+      if (gameType === 'S') {
+        if (normalizedType === 'S' || g.gameType === 'E') return true;
+        const month = new Date(g.date).getMonth() + 1;
+        const isSpringWindow = month >= 2 && month <= 3;
+        return normalizedType !== 'R' && isSpringWindow;
+      }
+      if (gameType === 'R') {
+        if (normalizedType === 'R') return true;
+        const month = new Date(g.date).getMonth() + 1;
+        return normalizedType !== 'S' && normalizedType !== 'E' && month >= 3;
+      }
+      return false;
+    }),
     [games, gameType]
   );
 
-  // Group by month
   const byMonth = useMemo(() => {
     const map = {};
     for (const g of filtered) {
@@ -51,7 +66,9 @@ function FullScheduleSection({ gameType, userData, onEditGame }) {
   }
 
   function monthLabel(key) {
-    const d = new Date(key + '-01');
+    const [year, month] = key.split('-').map(Number);
+    if (!year || !month) return key;
+    const d = new Date(year, month - 1, 1, 12, 0, 0);
     return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   }
 
@@ -71,8 +88,20 @@ function FullScheduleSection({ gameType, userData, onEditGame }) {
     </div>
   );
 
+  const selectedInnings = linescore?.innings || [];
+
+  const lastUpdatedLabel = lastUpdated
+    ? new Date(lastUpdated).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : '—';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem' }}>
+        <div style={{ color: 'var(--muted)', fontSize: '0.62rem' }}>Last updated: {lastUpdatedLabel}</div>
+        <button className="btn btn-outline btn-sm" onClick={refresh} disabled={loading}>
+          {loading ? 'Refreshing…' : '↻ Refresh'}
+        </button>
+      </div>
       {monthKeys.map(mKey => (
         <div key={mKey}>
           <div style={{ fontFamily: 'Oswald', fontSize: '0.65rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--orange)', marginBottom: '0.5rem', paddingBottom: '0.4rem', borderBottom: '1px solid rgba(255,89,16,0.2)' }}>
@@ -85,6 +114,7 @@ function FullScheduleSection({ gameType, userData, onEditGame }) {
               const recKey   = `mlb_${g.gamePk}`;
               const rec      = gameRecords[recKey] || {};
               const logged   = rec.attended || rec.planned;
+              const isExpanded = expandedGamePk === g.gamePk;
               const gameObj  = {
                 id: recKey, gamePk: g.gamePk,
                 emoji: g.isHome ? '🏟️' : '✈️',
@@ -93,26 +123,134 @@ function FullScheduleSection({ gameType, userData, onEditGame }) {
                 time: '', icon: '⚾', promo: gameType === 'S' ? 'Spring Training' : 'Regular Season',
               };
               return (
-                <div key={g.gamePk} className={`full-sched-row ${isToday ? 'full-sched-today' : ''} ${isPast ? 'full-sched-past' : ''}`}>
+                <div key={g.gamePk}>
+                  <div className={`full-sched-row ${isToday ? 'full-sched-today' : ''} ${isPast ? 'full-sched-past' : ''}`} onClick={() => setExpandedGamePk(isExpanded ? null : g.gamePk)} style={{ cursor: 'pointer' }}>
+                    <div className="fsr-date">{new Date(g.displayDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                    <div className="fsr-matchup">
+                      <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'Oswald', marginRight: '0.3rem' }}>{g.isHome ? 'vs' : '@'}</span>
+                      <span style={{ fontFamily: 'Oswald', fontSize: '0.82rem', color: isPast ? 'var(--muted)' : 'var(--text)' }}>{g.oppName}</span>
+                      {g.broadcasts?.length > 0 && (
+                        <span className="fsr-broadcast">{g.broadcasts.slice(0, 2).join(' · ')}</span>
+                      )}
+                    </div>
+                    <div className="fsr-venue" style={{ color: 'var(--muted)', fontSize: '0.6rem', fontFamily: 'DM Mono' }}>{g.isHome ? 'Citi Field' : g.venue?.split(',')[0]}</div>
+                    <div className="fsr-score">{scoreLabel(g)}</div>
+                    <div className="fsr-status">
+                      {statusLabel(g)}
+                      {onEditGame && (
+                        <button className={`btn btn-sm ${logged ? 'btn-outline' : 'btn-ghost'}`}
+                          style={{ fontSize: '0.5rem', padding: '0.15rem 0.4rem', marginLeft: '0.4rem', minHeight: 'unset' }}
+                          onClick={e => { e.stopPropagation(); onEditGame(gameObj); }}>
+                          {rec.attended ? '✏' : rec.planned ? '🎯' : '+'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="game-drilldown-panel" style={{ marginTop: '0.35rem', marginBottom: '0.55rem' }}>
+                      <div className="card-title" style={{ marginBottom: '0.35rem' }}>Game Snapshot</div>
+                      <div style={{ fontSize: '0.62rem', color: 'var(--text2)', marginBottom: '0.35rem' }}>
+                        {g.status || 'Scheduled'} · {g.venue || (g.isHome ? 'Citi Field' : 'Away')} · {new Date(g.date).toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--muted)', marginBottom: '0.45rem' }}>
+                        {g.winPitch && <span style={{ marginRight: '0.7rem' }}>W: {g.winPitch}</span>}
+                        {g.losePitch && <span style={{ marginRight: '0.7rem' }}>L: {g.losePitch}</span>}
+                        {g.savePitch && <span>SV: {g.savePitch}</span>}
+                        {!g.winPitch && !g.losePitch && !g.savePitch && 'Pitching decisions will appear after game completion.'}
+                      </div>
+
+                      {detailLoading && <div className="game-drilldown-status">Loading inning linescore…</div>}
+                      {!detailLoading && selectedInnings.length > 0 && (
+                        <div className="inning-grid">
+                          {selectedInnings.map(i => (
+                            <div key={i.num} className="inning-chip">
+                              <div className="inning-chip-label">Inning {i.num}</div>
+                              <div className="inning-chip-score">NYM {g.isHome ? i.home?.runs ?? 0 : i.away?.runs ?? 0} · OPP {g.isHome ? i.away?.runs ?? 0 : i.home?.runs ?? 0}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {!detailLoading && selectedInnings.length === 0 && (
+                        <div className="game-drilldown-status">Detailed linescore not posted yet for this game.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+function WBCScheduleSection() {
+  const { games, loading, error, refresh, lastUpdated } = useWBCSchedule();
+
+  const byMonth = useMemo(() => {
+    const map = {};
+    games.forEach(g => {
+      const key = g.displayDate?.slice(0, 7) || 'Unknown';
+      if (!map[key]) map[key] = [];
+      map[key].push(g);
+    });
+    return map;
+  }, [games]);
+
+  const monthKeys = Object.keys(byMonth).sort();
+  const finalCodes = new Set(['F', 'FO', 'FT', 'FR', 'FG', 'O']);
+
+  const lastUpdatedLabel = lastUpdated
+    ? new Date(lastUpdated).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : '—';
+
+  function monthLabel(key) {
+    const [year, month] = key.split('-').map(Number);
+    if (!year || !month) return key;
+    const d = new Date(year, month - 1, 1, 12, 0, 0);
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+
+  if (loading) return <div style={{ padding: '1.2rem', color: 'var(--muted)' }}>Loading WBC schedule…</div>;
+  if (error) return <div style={{ padding: '1rem', color: 'var(--loss)' }}>⚠ Could not load WBC schedule: {error}</div>;
+  if (!games.length) return <div style={{ padding: '1rem', color: 'var(--muted)' }}>No World Baseball Classic games found for this year yet.</div>;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem' }}>
+        <div style={{ color: 'var(--muted)', fontSize: '0.62rem' }}>Last updated: {lastUpdatedLabel}</div>
+        <button className="btn btn-outline btn-sm" onClick={refresh} disabled={loading}>↻ Refresh</button>
+      </div>
+
+      {monthKeys.map(mKey => (
+        <div key={mKey}>
+          <div style={{ fontFamily: 'Oswald', fontSize: '0.65rem', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--orange)', marginBottom: '0.5rem', paddingBottom: '0.4rem', borderBottom: '1px solid rgba(255,89,16,0.2)' }}>
+            {monthLabel(mKey)} ({byMonth[mKey].length} games)
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+            {byMonth[mKey].map(g => {
+              const isLive = g.statusCode === 'I';
+              const isFinal = finalCodes.has(g.statusCode);
+              return (
+                <div key={g.gamePk} className={`full-sched-row ${isLive ? 'full-sched-today' : ''}`}>
                   <div className="fsr-date">{new Date(g.displayDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
                   <div className="fsr-matchup">
-                    <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'Oswald', marginRight: '0.3rem' }}>{g.isHome ? 'vs' : '@'}</span>
-                    <span style={{ fontFamily: 'Oswald', fontSize: '0.82rem', color: isPast ? 'var(--muted)' : 'var(--text)' }}>{g.oppName}</span>
-                    {g.broadcasts?.length > 0 && (
-                      <span className="fsr-broadcast">{g.broadcasts.slice(0, 2).join(' · ')}</span>
+                    <span style={{ fontFamily: 'Oswald', fontSize: '0.82rem' }}>{g.awayName} @ {g.homeName}</span>
+                    {g.broadcasts?.length > 0 && <span className="fsr-broadcast">{g.broadcasts.slice(0, 2).join(' · ')}</span>}
+                  </div>
+                  <div className="fsr-venue" style={{ color: 'var(--muted)', fontSize: '0.6rem', fontFamily: 'DM Mono' }}>{g.venue || 'TBD'}</div>
+                  <div className="fsr-score">
+                    {(g.awayScore !== undefined || g.homeScore !== undefined) && (
+                      <span style={{ fontFamily: 'Bebas Neue', fontSize: '1rem', color: 'var(--text)' }}>{g.awayScore ?? '–'}–{g.homeScore ?? '–'}</span>
                     )}
                   </div>
-                  <div className="fsr-venue" style={{ color: 'var(--muted)', fontSize: '0.6rem', fontFamily: 'DM Mono' }}>{g.isHome ? 'Citi Field' : g.venue?.split(',')[0]}</div>
-                  <div className="fsr-score">{scoreLabel(g)}</div>
                   <div className="fsr-status">
-                    {statusLabel(g)}
-                    {onEditGame && (
-                      <button className={`btn btn-sm ${logged ? 'btn-outline' : 'btn-ghost'}`}
-                        style={{ fontSize: '0.5rem', padding: '0.15rem 0.4rem', marginLeft: '0.4rem', minHeight: 'unset' }}
-                        onClick={e => { e.stopPropagation(); onEditGame(gameObj); }}>
-                        {rec.attended ? '✏' : rec.planned ? '🎯' : '+'}
-                      </button>
-                    )}
+                    {isLive && <span className="badge badge-live">LIVE</span>}
+                    {isFinal && <span className="badge badge-win">Final</span>}
+                    {!isLive && !isFinal && <span style={{ color: 'var(--muted)', fontSize: '0.62rem' }}>Scheduled</span>}
                   </div>
                 </div>
               );
@@ -129,7 +267,7 @@ export function ScheduleView({ userData, onEditGame }) {
   const { gameRecords = {} } = userData;
   const today = new Date().toISOString().slice(0, 10);
   const [expandedId, setExpandedId] = useState(null);
-  const [schedMode, setSchedMode]   = useState('promo'); // 'promo' | 'spring' | 'regular'
+  const [schedMode, setSchedMode]   = useState('promo'); // 'promo' | 'spring' | 'regular' | 'wbc'
 
   const toggleExpand = id => setExpandedId(prev => prev === id ? null : id);
 
@@ -155,6 +293,9 @@ export function ScheduleView({ userData, onEditGame }) {
         <button className={`sst-btn ${schedMode === 'regular' ? 'active' : ''}`} onClick={() => setSchedMode('regular')}>
           📅 Regular Season
         </button>
+        <button className={`sst-btn ${schedMode === 'wbc' ? 'active' : ''}`} onClick={() => setSchedMode('wbc')}>
+          🌍 WBC
+        </button>
       </div>
 
       {schedMode === 'spring' && (
@@ -166,6 +307,12 @@ export function ScheduleView({ userData, onEditGame }) {
       {schedMode === 'regular' && (
         <div className="card">
           <FullScheduleSection gameType="R" userData={userData} onEditGame={onEditGame} />
+        </div>
+      )}
+
+      {schedMode === 'wbc' && (
+        <div className="card">
+          <WBCScheduleSection />
         </div>
       )}
 
@@ -468,6 +615,81 @@ function InfoTile({ icon, label, children }) {
       <div style={{ fontSize: '0.52rem', color: 'var(--muted)', letterSpacing: '0.18em', fontFamily: 'Oswald', textTransform: 'uppercase', marginBottom: '0.3rem' }}>{icon} {label}</div>
       {children}
     </div>
+  );
+}
+
+
+
+// ─── SEASON INSIGHTS VIEW ─────────────────────────────────────────────────────
+export function SeasonInsightsView({ userData }) {
+  const { gameRecords = {} } = userData;
+  const attended = PROMOS.filter(p => gameRecords[p.id]?.attended);
+  const planned = PROMOS.filter(p => gameRecords[p.id]?.planned && !gameRecords[p.id]?.attended);
+
+  const wins = attended.filter(p => gameRecords[p.id]?.result === 'W').length;
+  const losses = attended.filter(p => gameRecords[p.id]?.result === 'L').length;
+  const totalSpent = attended.reduce((sum, p) => sum + (gameRecords[p.id]?.totalCost || 0), 0);
+  const avgSpend = attended.length ? totalSpent / attended.length : 0;
+  const promosCollected = attended.filter(p => gameRecords[p.id]?.promoCollected).length;
+  const winRate = attended.length ? Math.round((wins / attended.length) * 100) : 0;
+
+  const byMonthMap = {};
+  for (const p of attended) {
+    const key = String(p.isoDate || '').slice(0, 7);
+    if (!key) continue;
+    const rec = gameRecords[p.id] || {};
+    if (!byMonthMap[key]) byMonthMap[key] = { games: 0, spend: 0, wins: 0, losses: 0 };
+    byMonthMap[key].games += 1;
+    byMonthMap[key].spend += rec.totalCost || 0;
+    if (rec.result === 'W') byMonthMap[key].wins += 1;
+    if (rec.result === 'L') byMonthMap[key].losses += 1;
+  }
+  const byMonth = Object.entries(byMonthMap).sort(([a],[b]) => a.localeCompare(b));
+  const maxGamesInMonth = Math.max(1, ...byMonth.map(([,v]) => v.games));
+  const bestMonth = byMonth.length ? byMonth.reduce((best, cur) => cur[1].games > best[1].games ? cur : best) : null;
+
+  return (
+    <>
+      <div className="page-hdr">
+        <div className="page-title">📈 My Mets Season Insights</div>
+        <div className="page-sub">Attendance Trends · Cost Insights · Monthly Breakdown</div>
+      </div>
+
+      <div className="stats-row" style={{ marginBottom: '1.5rem' }}>
+        <div className="stat-card"><div className="big">{attended.length}</div><div className="lbl">Attended</div></div>
+        <div className="stat-card"><div className="big" style={{ color: 'var(--blue3)' }}>{planned.length}</div><div className="lbl">Planned</div></div>
+        <div className="stat-card"><div className="big" style={{ color: wins >= losses ? 'var(--win)' : 'var(--loss)' }}>{wins}-{losses}</div><div className="lbl">W-L Logged</div></div>
+        <div className="stat-card"><div className="big" style={{ color: 'var(--gold)', fontSize: '1.8rem' }}>${totalSpent.toFixed(0)}</div><div className="lbl">Total Spent</div></div>
+        <div className="stat-card"><div className="big" style={{ color: 'var(--orange)', fontSize: '1.8rem' }}>${avgSpend.toFixed(0)}</div><div className="lbl">Avg / Game</div></div>
+        <div className="stat-card"><div className="big">{promosCollected}</div><div className="lbl">Promos Collected</div></div>
+        <div className="stat-card"><div className="big" style={{ color: 'var(--win)' }}>{winRate}%</div><div className="lbl">Win Rate</div></div>
+        <div className="stat-card"><div className="big" style={{ color: 'var(--blue3)', fontSize: '1.7rem' }}>{bestMonth ? new Date(bestMonth[0] + '-01T12:00:00').toLocaleDateString('en-US', { month: 'short' }) : '—'}</div><div className="lbl">Best Month</div></div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">📅 Monthly Attendance Momentum</div>
+        {byMonth.length === 0 ? (
+          <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>No attended games yet — log games to unlock your season trendline.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+            {byMonth.map(([m, v]) => {
+              const d = new Date(m + '-01T12:00:00');
+              const label = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+              const pct = Math.max(6, Math.round((v.games / maxGamesInMonth) * 100));
+              return (
+                <div key={m} style={{ display: 'grid', gridTemplateColumns: '110px 1fr auto', gap: '0.65rem', alignItems: 'center' }}>
+                  <div style={{ fontSize: '0.62rem', color: 'var(--text2)', fontFamily: 'Oswald', letterSpacing: '0.08em' }}>{label}</div>
+                  <div style={{ height: 10, background: 'rgba(0,45,92,0.35)', borderRadius: 999, overflow: 'hidden' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,var(--orange),var(--orange2))' }} />
+                  </div>
+                  <div style={{ fontSize: '0.6rem', color: 'var(--muted)', fontFamily: 'DM Mono' }}>{v.games}G · ${v.spend.toFixed(0)}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
