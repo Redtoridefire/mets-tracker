@@ -5,6 +5,7 @@
     <!-- viewport-fit=cover enables safe-area-inset env() vars for iPhone notch/home bar -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Mets HQ — Personal New York Mets fan dashboard and 2026 season tracker" />
+    <!-- This is the most updated version. -->
 
     <!-- Mobile / PWA meta -->
     <meta name="theme-color" content="#00091a" />
@@ -21,8 +22,8 @@
       • script-src 'self'          — only load scripts from this origin
       • style-src 'unsafe-inline'  — required: app injects <style> tag at runtime
       • font-src gstatic.com       — Google Fonts glyphs
-      • connect-src                — only these external APIs can be fetched
-      • img-src data: blob:        — allow base64/blob images (future promo photos)
+      • connect-src                — only these external APIs can be fetched (weather, MLB, RSS proxies)
+      • img-src data: blob: https: — allow base64/blob images + external article thumbnails
       • object-src / base-uri      — block plugins & base-tag hijacking
       Note: frame-ancestors needs a response header, not meta tag, for full effect.
     -->
@@ -31,8 +32,8 @@
       script-src 'self';
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
       font-src https://fonts.gstatic.com;
-      connect-src https://wttr.in https://statsapi.mlb.com;
-      img-src 'self' data: blob:;
+      connect-src https://wttr.in https://statsapi.mlb.com https://api.allorigins.win https://api.rss2json.com https://*.supabase.co;
+      img-src 'self' data: blob: https:;
       object-src 'none';
       base-uri 'self';
     " />
@@ -41,7 +42,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@300;400;500;600;700&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
-    <script type="module" crossorigin src="/assets/index-DGh6BjFT.js"></script>
+    <script type="module" crossorigin src="/assets/index-ZIZA0gq-.js"></script>
   </head>
   <body>
     <div id="root"></div>
