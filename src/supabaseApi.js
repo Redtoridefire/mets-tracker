@@ -34,19 +34,15 @@ function isSessionValid(session) {
   return session.expires_at - now > 60;
 }
 
-async function fetchWithRetry(url, options = {}, retries = 2, delayMs = 350, timeoutMs = 12_000) {
+async function fetchWithRetry(url, options = {}, retries = 2, delayMs = 350) {
   let lastErr;
   for (let i = 0; i <= retries; i++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const resp = await fetch(url, { ...options, signal: options.signal || controller.signal });
-      clearTimeout(timeout);
+      const resp = await fetch(url, options);
       if (resp.ok || resp.status < 500) return resp;
       lastErr = new Error(`HTTP ${resp.status}`);
     } catch (e) {
-      clearTimeout(timeout);
-      lastErr = e?.name === 'AbortError' ? new Error('Request timed out') : e;
+      lastErr = e;
     }
     if (i < retries) await new Promise(r => setTimeout(r, delayMs * (i + 1)));
   }
@@ -153,21 +149,21 @@ export async function uploadMemoryPost({ file, caption = '', gameLabel = '', boa
   const cleanName = sanitizeFileName(file.name).replace(/\.[^.]+$/, '');
   const objectPath = `${session.user.id}/${Date.now()}_${cleanName}.${ext}`;
 
-  const uploadResp = await fetchWithRetry(`${SB_URL}/storage/v1/object/memory-board/${objectPath.split('/').map(encodeURIComponent).join('/')}`, {
+  const uploadResp = await fetch(`${SB_URL}/storage/v1/object/memory-board/${objectPath.split('/').map(encodeURIComponent).join('/')}`, {
     method: 'POST',
     headers: authHeaders(session.access_token, {
       'Content-Type': file.type || 'application/octet-stream',
       'x-upsert': 'false',
     }),
     body: file,
-  }, 1, 500, 45_000);
+  });
 
   if (!uploadResp.ok) {
     const text = await uploadResp.text();
     throw new Error(`Upload failed (${uploadResp.status}): ${text.slice(0, 120)}`);
   }
 
-  const insertResp = await fetchWithRetry(`${SB_URL}/rest/v1/memory_posts`, {
+  const insertResp = await fetch(`${SB_URL}/rest/v1/memory_posts`, {
     method: 'POST',
     headers: authHeaders(session.access_token, {
       'Content-Type': 'application/json',
@@ -180,7 +176,7 @@ export async function uploadMemoryPost({ file, caption = '', gameLabel = '', boa
       game_label: gameLabel.slice(0, 90),
       ...(boardId ? { board_id: boardId } : {}),
     }),
-  }, 1, 350, 15_000);
+  });
 
   if (!insertResp.ok) {
     const text = await insertResp.text();

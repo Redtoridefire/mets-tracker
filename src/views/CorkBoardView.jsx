@@ -19,15 +19,6 @@ const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/h
 const PAGE_SIZE = 24;
 
 
-function withTimeout(promise, ms, label = 'Operation timed out') {
-  let timer;
-  const timeoutPromise = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(label)), ms);
-  });
-  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
-}
-
-
 function inferMimeType(file) {
   const explicit = (file?.type || '').toLowerCase();
   if (explicit) return explicit;
@@ -269,10 +260,9 @@ export default function CorkBoardView() {
     if (file.size > MAX_FILE_MB * 1024 * 1024) return setError(`File too large. Max ${MAX_FILE_MB}MB.`);
     try {
       setUploading(true); setError(null);
-      const preparedFile = await withTimeout(compressImageFile(file), 15_000, 'Image preparation timed out. Please try a smaller photo.');
-      await withTimeout(uploadMemoryPost({ file: preparedFile, caption, gameLabel, boardId: activeBoardId || undefined }), 60_000, 'Upload timed out. Please retry.');
+      await uploadMemoryPost({ file: await compressImageFile(file), caption, gameLabel, boardId: activeBoardId || undefined });
       setCaption(''); setGameLabel(''); setFile(null);
-      await withTimeout(load(true, activeBoardId), 20_000, 'Upload finished but board refresh timed out. Pull to refresh.');
+      await load(true, activeBoardId);
     } catch (err) { setError(err.message); }
     finally { setUploading(false); }
   };
@@ -296,7 +286,7 @@ export default function CorkBoardView() {
     try {
       setReportingId(post.id); setError(null);
       await submitMemoryReport(post.id, reason);
-      await withTimeout(load(true, activeBoardId), 20_000, 'Refresh timed out. Pull to refresh.');
+      await load(true, activeBoardId);
       alert('Thanks — report submitted for review.');
     } catch (err) { setError(err.message); }
     finally { setReportingId(''); }
