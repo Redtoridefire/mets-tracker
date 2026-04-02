@@ -19,6 +19,15 @@ const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/h
 const PAGE_SIZE = 24;
 
 
+function withTimeout(promise, ms, label = 'Operation timed out') {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(label)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
+
 function inferMimeType(file) {
   const explicit = (file?.type || '').toLowerCase();
   if (explicit) return explicit;
@@ -260,9 +269,21 @@ export default function CorkBoardView() {
     if (file.size > MAX_FILE_MB * 1024 * 1024) return setError(`File too large. Max ${MAX_FILE_MB}MB.`);
     try {
       setUploading(true); setError(null);
-      await uploadMemoryPost({ file: await compressImageFile(file), caption, gameLabel, boardId: activeBoardId || undefined });
+      const preparedFile = await withTimeout(compressImageFile(file), 15_000, 'Image preparation timed out. Please try a smaller photo.');
+      const newRow = await withTimeout(uploadMemoryPost({ file: preparedFile, caption, gameLabel, boardId: activeBoardId || undefined }), 60_000, 'Upload timed out. Please retry.');
+
+      let signedUrl = '';
+      try {
+        signedUrl = await withTimeout(createSignedImageUrl(newRow.image_path), 10_000, 'Image uploaded but preview link timed out.');
+      } catch {
+        signedUrl = '';
+      }
+
+      setPosts(prev => [{ ...newRow, signedUrl, broken: false }, ...prev.filter(p => p.id !== newRow.id)]);
       setCaption(''); setGameLabel(''); setFile(null);
-      await load(true, activeBoardId);
+
+      // Refresh in background so upload UX doesn't appear hung on slower networks.
+      load(true, activeBoardId).catch(() => {});
     } catch (err) { setError(err.message); }
     finally { setUploading(false); }
   };
@@ -286,7 +307,7 @@ export default function CorkBoardView() {
     try {
       setReportingId(post.id); setError(null);
       await submitMemoryReport(post.id, reason);
-      await load(true, activeBoardId);
+      await withTimeout(load(true, activeBoardId), 20_000, 'Refresh timed out. Pull to refresh.');
       alert('Thanks — report submitted for review.');
     } catch (err) { setError(err.message); }
     finally { setReportingId(''); }
