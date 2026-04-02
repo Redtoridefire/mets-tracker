@@ -140,9 +140,9 @@ export default function CorkBoardView() {
     return hydrated.filter(p => !p.broken);
   };
 
-  const load = async (reset = true, boardIdOverride = null) => {
+  const load = async (reset = true, boardIdOverride = null, { silent = false } = {}) => {
     try {
-      if (reset) setLoading(true); else setLoadingMore(true);
+      if (!silent) { if (reset) setLoading(true); else setLoadingMore(true); }
       setError(null);
 
       const baseOffset = reset ? 0 : offset;
@@ -166,10 +166,9 @@ export default function CorkBoardView() {
       setOffset(baseOffset + rows.length);
       setHasMore(rows.length === PAGE_SIZE);
     } catch (e) {
-      setError(e.message);
+      if (!silent) setError(e.message);
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (!silent) { setLoading(false); setLoadingMore(false); }
     }
   };
 
@@ -282,8 +281,8 @@ export default function CorkBoardView() {
       setPosts(prev => [{ ...newRow, signedUrl, broken: false }, ...prev.filter(p => p.id !== newRow.id)]);
       setCaption(''); setGameLabel(''); setFile(null);
 
-      // Refresh in background so upload UX doesn't appear hung on slower networks.
-      load(true, activeBoardId).catch(() => {});
+      // Refresh in background without showing a loading spinner.
+      load(true, activeBoardId, { silent: true }).catch(() => {});
     } catch (err) { setError(err.message); }
     finally { setUploading(false); }
   };
