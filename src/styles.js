@@ -475,6 +475,247 @@ const CSS = `
   .game-result-card.live { border-left: 4px solid #ff4444; box-shadow: 0 0 20px rgba(255,68,68,0.1); }
   .game-result-card.upcoming { border-left: 4px solid var(--border2); opacity: 0.8; }
 
+  .game-card-toggle {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    width: 100%;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .game-card-chevron {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-left: auto;
+  }
+
+
+  .game-hub-row {
+    margin-top: 0.5rem;
+  }
+
+  .game-hub-btn {
+    border: 1px solid rgba(255, 89, 16, 0.55);
+    color: var(--orange2);
+    background: rgba(255, 89, 16, 0.08);
+    border-radius: 4px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.54rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.25rem 0.45rem;
+    cursor: pointer;
+  }
+
+  .game-hub {
+    width: min(96vw, 1180px);
+    max-height: 90vh;
+    overflow: auto;
+    background: rgba(0, 9, 26, 0.98);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 1rem;
+  }
+
+  .game-hub-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.8rem;
+  }
+
+  .game-result-card.expanded {
+    border-color: var(--border2);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.28);
+  }
+
+  .game-drilldown {
+    margin-top: 0.8rem;
+    border-top: 1px solid rgba(0,45,92,0.45);
+    padding-top: 0.8rem;
+  }
+
+  .game-drilldown-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .game-drilldown-panel {
+    background: rgba(0, 15, 38, 0.75);
+    border: 1px solid rgba(0, 80, 160, 0.35);
+    border-radius: 6px;
+    padding: 0.7rem;
+  }
+
+  .game-drilldown-status {
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: 'Oswald', sans-serif;
+  }
+
+  .inning-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+    gap: 0.45rem;
+  }
+
+  .inning-chip {
+    background: rgba(0,45,92,0.32);
+    border: 1px solid rgba(0,80,179,0.35);
+    border-radius: 5px;
+    padding: 0.4rem;
+  }
+
+  .inning-chip-label {
+    font-family: 'Oswald', sans-serif;
+    letter-spacing: 0.08em;
+    font-size: 0.58rem;
+    color: var(--muted);
+  }
+
+  .inning-chip-score {
+    font-size: 0.63rem;
+    color: var(--text2);
+    margin-top: 0.15rem;
+  }
+
+  .performer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .performer-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    font-size: 0.6rem;
+    border-bottom: 1px solid rgba(0,45,92,0.3);
+    padding-bottom: 0.2rem;
+  }
+
+  .event-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    max-height: 280px;
+    overflow: auto;
+    padding-right: 0.2rem;
+  }
+
+  .event-item {
+    border-left: 2px solid rgba(0,80,179,0.5);
+    padding-left: 0.55rem;
+  }
+
+  .event-meta {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.54rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .event-text {
+    font-size: 0.63rem;
+    color: var(--text);
+    margin-top: 0.15rem;
+    line-height: 1.3;
+  }
+
+  .event-runners {
+    font-size: 0.56rem;
+    color: var(--orange2);
+    margin-top: 0.2rem;
+  }
+
+
+
+  /* ── CORK BOARD ───────────────────────────────────────────────────────────── */
+  .cork-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.9rem;
+  }
+
+  .cork-card {
+    background: linear-gradient(180deg, rgba(17, 42, 66, 0.85), rgba(5, 22, 39, 0.9));
+    border: 1px solid rgba(0, 80, 160, 0.35);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .cork-photo {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    background: rgba(0, 15, 38, 0.8);
+  }
+
+  .cork-meta {
+    padding: 0.6rem 0.65rem 0.7rem;
+  }
+
+  .cork-game {
+    font-family: 'Oswald', sans-serif;
+    font-size: 0.56rem;
+    letter-spacing: 0.14em;
+    color: var(--orange2);
+    text-transform: uppercase;
+    margin-bottom: 0.25rem;
+  }
+
+  .cork-caption {
+    font-size: 0.67rem;
+    color: var(--text);
+    line-height: 1.35;
+  }
+
+  .cork-date {
+    margin-top: 0.35rem;
+    font-size: 0.52rem;
+    color: var(--muted);
+  }
+
+
+  .cork-lightbox {
+    width: min(96vw, 1200px);
+    max-height: 92vh;
+    background: rgba(0, 9, 26, 0.98);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 0.75rem;
+    overflow: auto;
+    position: relative;
+  }
+
+  .cork-lightbox-close {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    float: right;
+    margin-bottom: 0.5rem;
+  }
+
+  .cork-lightbox-img {
+    width: 100%;
+    height: auto;
+    max-height: 78vh;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #000;
+  }
+
+  .cork-lightbox-meta {
+    clear: both;
+    margin-top: 0.55rem;
+    padding: 0.3rem 0.2rem;
+  }
   /* ── TROPHY SHELF ─────────────────────────────────────────────────────────── */
   .trophy-item {
     background: var(--surface);
@@ -1057,6 +1298,59 @@ const CSS = `
   .feed-article-desc    { font-size: 0.65rem; color: var(--muted); line-height: 1.5; margin-bottom: 0.3rem; }
   .feed-article-meta    { font-size: 0.55rem; color: var(--orange); font-family: 'Oswald', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
 
+
+  .feed-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.8rem;
+  }
+
+  .feed-chip {
+    border: 1px solid var(--border2);
+    background: rgba(0,45,92,0.45);
+    color: var(--text2);
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.56rem;
+    cursor: pointer;
+    font-family: 'Oswald', sans-serif;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .feed-chip.active {
+    border-color: rgba(255,89,16,0.5);
+    color: var(--orange2);
+    background: rgba(255,89,16,0.08);
+  }
+
+  .feed-count {
+    margin-left: auto;
+    font-size: 0.55rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .feed-bookmark {
+    border: 1px solid rgba(0,80,179,0.45);
+    background: rgba(0,45,92,0.45);
+    color: var(--text2);
+    border-radius: 4px;
+    min-width: 1.5rem;
+    height: 1.4rem;
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1;
+  }
+
+  .feed-bookmark.active {
+    border-color: rgba(255,204,0,0.55);
+    color: var(--gold);
+    background: rgba(255,204,0,0.12);
+  }
   .feed-error {
     background: var(--surface);
     border: 1px solid var(--border);
