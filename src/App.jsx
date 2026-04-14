@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import CSS from './styles.js';
 import { PROMOS } from './data/promos.js';
 import { useMLBSchedule } from './hooks.js';
+import { todayLocalStr } from './dateUtil.js';
 import {
   getProfiles, createProfile, deleteProfile,
   getActiveProfileId, setActiveProfileId,
@@ -358,7 +359,7 @@ function ProfileSwitcherModal({ currentId, onSwitch, onClose }) {
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
       a.href     = url;
-      a.download = `mets-hq-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `mets-hq-backup-${todayLocalStr()}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -586,7 +587,7 @@ export default function App() {
 
   // Game Day detection — called at App level so banner + Overview card share the data
   const { games: scheduleGames } = useMLBSchedule();
-  const todayStr   = new Date().toISOString().slice(0, 10);
+  const todayStr   = todayLocalStr();
   const todayGame  = scheduleGames.find(g => g.displayDate === todayStr && g.gameType === 'R') || null;
   const todayPromo = PROMOS.find(p => p.isoDate === todayStr) || null;
 
@@ -605,8 +606,25 @@ export default function App() {
   };
 
   const handleSaveGame = (form) => {
+    // Preserve game metadata (opponent, date, venue, etc.) on the record so
+    // games logged from the full schedule (e.g. `mlb_123456`) still have
+    // display info when rendered in MyGamesView, since those games aren't
+    // part of the hardcoded PROMOS list.
+    const gameMeta = {
+      emoji:    editGame.emoji || '⚾',
+      opponent: editGame.opponent || '',
+      display:  editGame.display || '',
+      time:     editGame.time || '',
+      icon:     editGame.icon || '⚾',
+      promo:    editGame.promo || '',
+      isoDate:  editGame.isoDate || '',
+      isHome:   editGame.isHome,
+      venue:    editGame.venue || '',
+      gamePk:   editGame.gamePk,
+    };
+    const merged = { ...(userData.gameRecords?.[editGame.id] || {}), ...form, game: gameMeta };
     const next = patchUserData(profileId, {
-      gameRecords: { ...userData.gameRecords, [editGame.id]: form }
+      gameRecords: { ...userData.gameRecords, [editGame.id]: merged }
     });
     setUserData(next);
     setEditGame(null);

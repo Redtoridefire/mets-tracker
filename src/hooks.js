@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { METS_TEAM_ID } from './data/promos.js';
+import { localDateStr, todayLocalStr } from './dateUtil.js';
 
 // ─── API CACHE HELPER ─────────────────────────────────────────────────────────
 // Checks localStorage before hitting the network. Respects a TTL (ms).
@@ -157,7 +158,7 @@ export function useMLBSchedule() {
     const today = new Date();
     const start = new Date(today); start.setDate(start.getDate() - 14);
     const end   = new Date(today); end.setDate(end.getDate() + 30);
-    const fmt   = d => d.toISOString().slice(0, 10);
+    const fmt   = d => localDateStr(d);
     const todayStr = fmt(today);
 
     const url = `https://statsapi.mlb.com/api/v1/schedule?teamId=${METS_TEAM_ID}`
@@ -223,7 +224,7 @@ export function useWBCSchedule() {
     let cancelled = false;
     setLoading(true);
     const year = new Date().getFullYear();
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = todayLocalStr();
     const forceRefresh = refreshToken > 0;
     const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=51`
       + `&startDate=${year}-01-01&endDate=${year}-12-31`
@@ -415,7 +416,7 @@ export function useMLBFullSchedule() {
     let cancelled = false;
     setLoading(true);
     const season   = new Date().getFullYear();
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = todayLocalStr();
     const forceRefresh = refreshToken > 0;
     const url = `https://statsapi.mlb.com/api/v1/schedule?teamId=${METS_TEAM_ID}`
       + `&sportId=1&season=${season}&gameTypes=S,E,R`
@@ -483,7 +484,7 @@ export function useMLBTransactions(daysBack = 90) {
     const today = new Date();
     const start = new Date(today);
     start.setDate(start.getDate() - daysBack);
-    const fmt      = d => d.toISOString().slice(0, 10);
+    const fmt      = d => localDateStr(d);
     const todayStr = fmt(today);
     const url = `https://statsapi.mlb.com/api/v1/transactions?teamId=${METS_TEAM_ID}`
       + `&startDate=${fmt(start)}&endDate=${todayStr}`;
@@ -681,7 +682,7 @@ export function useMLBTeamStats() {
   useEffect(() => {
     let cancelled = false;
     const season   = new Date().getFullYear();
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = todayLocalStr();
 
     const hitUrl  = `https://statsapi.mlb.com/api/v1/teams/${METS_TEAM_ID}/stats`
       + `?stats=season&season=${season}&group=hitting&sportId=1`;

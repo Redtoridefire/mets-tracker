@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   acceptBoardInvite,
   createBoard,
@@ -105,6 +105,8 @@ export default function CorkBoardView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadStage, setUploadStage] = useState('');
+  const uploadAbortRef = useRef(null);
   const [caption, setCaption] = useState('');
   const [gameLabel, setGameLabel] = useState('');
   const [file, setFile] = useState(null);
@@ -260,17 +262,51 @@ export default function CorkBoardView() {
     }
   };
 
+  const stageLabel = s => {
+    if (s === 'compress') return 'Preparing photo…';
+    if (s === 'auth')     return 'Checking session…';
+    if (s === 'prepare')  return 'Reading photo…';
+    if (s === 'upload')   return 'Uploading to storage…';
+    if (s === 'save')     return 'Saving to board…';
+    if (s === 'signurl')  return 'Finalizing…';
+    return 'Uploading…';
+  };
+
   const onUpload = async e => {
     e.preventDefault();
     if (!file) return;
     const detectedType = inferMimeType(file);
     if (!ALLOWED_TYPES.has(detectedType)) return setError('Unsupported file type. Use JPG, PNG, WEBP, or HEIC.');
     if (file.size > MAX_FILE_MB * 1024 * 1024) return setError(`File too large. Max ${MAX_FILE_MB}MB.`);
-    try {
-      setUploading(true); setError(null);
-      const preparedFile = await withTimeout(compressImageFile(file), 15_000, 'Image preparation timed out. Please try a smaller photo.');
-      const newRow = await withTimeout(uploadMemoryPost({ file: preparedFile, caption, gameLabel, boardId: activeBoardId || undefined }), 60_000, 'Upload timed out. Please retry.');
 
+    // One AbortController governs the whole upload so a single hard timeout
+    // can reliably cancel every in-flight fetch (storage PUT, metadata insert,
+    // signed-URL), and so the user can explicitly cancel via the UI.
+    const controller = new AbortController();
+    uploadAbortRef.current = controller;
+    const hardTimeout = setTimeout(() => {
+      controller.abort(new Error('Upload timed out after 2 minutes.'));
+    }, 120_000);
+
+    try {
+      setUploading(true); setError(null); setUploadStage('compress');
+      const preparedFile = await withTimeout(
+        compressImageFile(file),
+        20_000,
+        'Image preparation timed out. Please try a smaller photo.'
+      );
+      if (controller.signal.aborted) throw new Error('Upload canceled');
+
+      const newRow = await uploadMemoryPost({
+        file: preparedFile,
+        caption,
+        gameLabel,
+        boardId: activeBoardId || undefined,
+        signal: controller.signal,
+        onStage: setUploadStage,
+      });
+
+      setUploadStage('signurl');
       let signedUrl = '';
       try {
         signedUrl = await withTimeout(createSignedImageUrl(newRow.image_path), 10_000, 'Image uploaded but preview link timed out.');
@@ -283,8 +319,20 @@ export default function CorkBoardView() {
 
       // Refresh in background without showing a loading spinner.
       load(true, activeBoardId, { silent: true }).catch(() => {});
-    } catch (err) { setError(err.message); }
-    finally { setUploading(false); }
+    } catch (err) {
+      const msg = err?.message || String(err) || 'Upload failed';
+      setError(controller.signal.aborted ? `Upload canceled or timed out: ${msg}` : msg);
+    } finally {
+      clearTimeout(hardTimeout);
+      uploadAbortRef.current = null;
+      setUploading(false);
+      setUploadStage('');
+    }
+  };
+
+  const onCancelUpload = () => {
+    const c = uploadAbortRef.current;
+    if (c) c.abort(new Error('Upload canceled by user'));
   };
 
   const onDelete = async post => {
@@ -361,7 +409,12 @@ export default function CorkBoardView() {
               <div className="form-group" style={{ marginBottom: 0 }}><label>Photo</label><input type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] || null)} required /></div>
             </div>
             <div className="form-group" style={{ marginBottom: '0.75rem' }}><label>Caption (optional)</label><textarea value={caption} onChange={e => setCaption(e.target.value)} maxLength={220} placeholder="What was happening in this moment?" style={{ minHeight: 72 }} /></div>
-            <button className="btn btn-primary" disabled={uploading || !file}>{uploading ? 'Uploading…' : '📍 Pin to Board'}</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <button className="btn btn-primary" disabled={uploading || !file}>{uploading ? stageLabel(uploadStage) : '📍 Pin to Board'}</button>
+              {uploading && (
+                <button type="button" className="btn btn-outline btn-sm" onClick={onCancelUpload}>Cancel</button>
+              )}
+            </div>
           </form>
 
           {error && <div className="card" style={{ marginBottom: '1rem', borderColor: 'rgba(255,68,68,0.4)' }}><div style={{ fontSize: '0.7rem', color: 'var(--loss)' }}>⚠️ {error}</div></div>}

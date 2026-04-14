@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMLBSchedule, useWBCSchedule } from '../hooks.js';
+import { todayLocalStr } from '../dateUtil.js';
 
 const GAME_FEED_CACHE = new Map();
 const GAME_FEED_TTL_MS = 60_000;
@@ -31,7 +32,7 @@ export default function LiveScoresView() {
   const [expandedGamePk, setExpandedGamePk] = useState(null);
   const [hubGame, setHubGame] = useState(null);
 
-  const today    = new Date().toISOString().slice(0,10);
+  const today    = todayLocalStr();
   const live     = games.filter(g => g.statusCode === 'I');
   const recent   = games.filter(g => g.result !== null && g.displayDate <= today).slice(0, 20);
   const upcoming = games.filter(g => g.statusCode === 'S' || (!g.result && g.displayDate > today)).slice(0, 10);

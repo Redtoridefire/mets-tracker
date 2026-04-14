@@ -34,18 +34,35 @@ function isSessionValid(session) {
   return session.expires_at - now > 60;
 }
 
+// Combine an external AbortSignal (from the caller) with an internal
+// per-attempt timeout signal so aborts propagate correctly either way.
+function linkAbortSignal(externalSignal, timeoutMs) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(new Error('timeout')), timeoutMs);
+  const onExternalAbort = () => controller.abort(externalSignal?.reason || new Error('aborted'));
+  if (externalSignal) {
+    if (externalSignal.aborted) onExternalAbort();
+    else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+  }
+  const cleanup = () => {
+    clearTimeout(timeoutId);
+    if (externalSignal) externalSignal.removeEventListener?.('abort', onExternalAbort);
+  };
+  return { signal: controller.signal, cleanup };
+}
+
 async function fetchWithRetry(url, options = {}, retries = 2, delayMs = 350, timeoutMs = 12_000) {
   let lastErr;
   for (let i = 0; i <= retries; i++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const { signal, cleanup } = linkAbortSignal(options.signal, timeoutMs);
     try {
-      const resp = await fetch(url, { ...options, signal: options.signal || controller.signal });
-      clearTimeout(timeout);
-      if (resp.ok || resp.status < 500) return resp;
+      const resp = await fetch(url, { ...options, signal });
+      cleanup();
+      if (resp.ok || (resp.status >= 400 && resp.status < 500)) return resp;
       lastErr = new Error(`HTTP ${resp.status}`);
     } catch (e) {
-      clearTimeout(timeout);
+      cleanup();
+      if (options.signal?.aborted) throw e;
       lastErr = e?.name === 'AbortError' ? new Error('Request timed out') : e;
     }
     if (i < retries) await new Promise(r => setTimeout(r, delayMs * (i + 1)));
@@ -60,7 +77,7 @@ export async function ensureAnonymousSession() {
   if (isSessionValid(existing)) return existing;
   if (pendingAnonymousSession) return pendingAnonymousSession;
 
-  pendingAnonymousSession = (async () => {
+  const work = (async () => {
     const resp = await fetchWithRetry(`${SB_URL}/auth/v1/signup`, {
       method: 'POST',
       headers: {
@@ -69,7 +86,7 @@ export async function ensureAnonymousSession() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ data: { app: 'mets-hq' } }),
-    });
+    }, 1, 400, 10_000);
 
     if (!resp.ok) {
       const text = await resp.text();
@@ -84,11 +101,11 @@ export async function ensureAnonymousSession() {
     return session;
   })();
 
-  try {
-    return await pendingAnonymousSession;
-  } finally {
-    pendingAnonymousSession = null;
-  }
+  // Always clear pendingAnonymousSession when the work settles — regardless
+  // of which caller awaits it — so a failed/hung signup never wedges the
+  // singleton and blocks subsequent retries.
+  pendingAnonymousSession = work.finally(() => { pendingAnonymousSession = null; });
+  return pendingAnonymousSession;
 }
 
 function authHeaders(accessToken, extra = {}) {
@@ -147,26 +164,51 @@ function sanitizeFileName(name) {
   return String(name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-60);
 }
 
-export async function uploadMemoryPost({ file, caption = '', gameLabel = '', boardId = null }) {
+export async function uploadMemoryPost({ file, caption = '', gameLabel = '', boardId = null, signal, onStage }) {
+  const stage = s => { try { onStage?.(s); } catch { /* ignore */ } };
+
+  stage('auth');
   const session = await ensureAnonymousSession();
-  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const cleanName = sanitizeFileName(file.name).replace(/\.[^.]+$/, '');
+  if (signal?.aborted) throw new Error('Upload canceled');
+
+  const ext = (file.name?.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanName = sanitizeFileName(file.name || 'photo').replace(/\.[^.]+$/, '');
   const objectPath = `${session.user.id}/${Date.now()}_${cleanName}.${ext}`;
 
+  // Pre-read the File into an ArrayBuffer before starting the network upload.
+  // On iOS/Safari, a File reference from the camera/photo picker can have
+  // lazily-loaded data that fails mid-stream; resolving it to a concrete
+  // Blob avoids those hangs and gives us a real byte count to send.
+  stage('prepare');
+  let body;
+  try {
+    const buf = await file.arrayBuffer();
+    body = new Blob([buf], { type: file.type || 'application/octet-stream' });
+  } catch (e) {
+    throw new Error(`Could not read photo: ${e?.message || 'unknown error'}`);
+  }
+  if (signal?.aborted) throw new Error('Upload canceled');
+
+  stage('upload');
+  // Single-shot upload with a generous timeout. We deliberately do NOT
+  // retry here — retrying a 90MB upload on a flaky mobile connection
+  // usually makes the experience worse, not better.
   const uploadResp = await fetchWithRetry(`${SB_URL}/storage/v1/object/memory-board/${objectPath.split('/').map(encodeURIComponent).join('/')}`, {
     method: 'POST',
     headers: authHeaders(session.access_token, {
-      'Content-Type': file.type || 'application/octet-stream',
+      'Content-Type': body.type || 'application/octet-stream',
       'x-upsert': 'false',
     }),
-    body: file,
-  }, 1, 500, 45_000);
+    body,
+    signal,
+  }, 0, 0, 90_000);
 
   if (!uploadResp.ok) {
     const text = await uploadResp.text();
-    throw new Error(`Upload failed (${uploadResp.status}): ${text.slice(0, 120)}`);
+    throw new Error(`Upload failed (${uploadResp.status}): ${text.slice(0, 160)}`);
   }
 
+  stage('save');
   const insertResp = await fetchWithRetry(`${SB_URL}/rest/v1/memory_posts`, {
     method: 'POST',
     headers: authHeaders(session.access_token, {
@@ -180,14 +222,18 @@ export async function uploadMemoryPost({ file, caption = '', gameLabel = '', boa
       game_label: gameLabel.slice(0, 90),
       ...(boardId ? { board_id: boardId } : {}),
     }),
+    signal,
   }, 1, 350, 15_000);
 
   if (!insertResp.ok) {
     const text = await insertResp.text();
-    throw new Error(`Metadata save failed (${insertResp.status}): ${text.slice(0, 120)}`);
+    throw new Error(`Metadata save failed (${insertResp.status}): ${text.slice(0, 160)}`);
   }
 
-  const [row] = await insertResp.json();
+  const payload = await insertResp.json();
+  const row = Array.isArray(payload) ? payload[0] : payload;
+  if (!row?.id) throw new Error('Metadata save returned no row');
+  stage('done');
   return row;
 }
 
