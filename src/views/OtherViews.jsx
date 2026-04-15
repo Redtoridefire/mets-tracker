@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { PROMOS, EGGROLL_TEAMS } from '../data/promos.js';
 import { useMLBFullSchedule, useMLBGameDetail, useWBCSchedule } from '../hooks.js';
+import { todayLocalStr, displayDateToLocalDate } from '../dateUtil.js';
 
 // ─── FULL SCHEDULE SECTION ────────────────────────────────────────────────────
 function FullScheduleSection({ gameType, userData, onEditGame }) {
@@ -8,7 +9,7 @@ function FullScheduleSection({ gameType, userData, onEditGame }) {
   const { gameRecords = {} }      = userData || {};
   const [expandedGamePk, setExpandedGamePk] = useState(null);
   const { linescore, loading: detailLoading } = useMLBGameDetail(expandedGamePk);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalStr();
 
   const filtered = useMemo(() =>
     games.filter(g => {
@@ -115,17 +116,23 @@ function FullScheduleSection({ gameType, userData, onEditGame }) {
               const rec      = gameRecords[recKey] || {};
               const logged   = rec.attended || rec.planned;
               const isExpanded = expandedGamePk === g.gamePk;
+              const rowDate  = displayDateToLocalDate(g.displayDate);
               const gameObj  = {
                 id: recKey, gamePk: g.gamePk,
                 emoji: g.isHome ? '🏟️' : '✈️',
                 opponent: g.oppName, oppShort: g.oppName?.split(' ').pop(),
-                display: new Date(g.displayDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                time: '', icon: '⚾', promo: gameType === 'S' ? 'Spring Training' : 'Regular Season',
+                display: rowDate ? rowDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : g.displayDate,
+                isoDate: g.displayDate,
+                isHome: g.isHome,
+                venue: g.venue || (g.isHome ? 'Citi Field' : ''),
+                time: g.date ? new Date(g.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '',
+                icon: '⚾',
+                promo: gameType === 'S' ? 'Spring Training' : 'Regular Season',
               };
               return (
                 <div key={g.gamePk}>
                   <div className={`full-sched-row ${isToday ? 'full-sched-today' : ''} ${isPast ? 'full-sched-past' : ''}`} onClick={() => setExpandedGamePk(isExpanded ? null : g.gamePk)} style={{ cursor: 'pointer' }}>
-                    <div className="fsr-date">{new Date(g.displayDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                    <div className="fsr-date">{rowDate ? rowDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : g.displayDate}</div>
                     <div className="fsr-matchup">
                       <span style={{ fontSize: '0.65rem', color: 'var(--muted)', fontFamily: 'Oswald', marginRight: '0.3rem' }}>{g.isHome ? 'vs' : '@'}</span>
                       <span style={{ fontFamily: 'Oswald', fontSize: '0.82rem', color: isPast ? 'var(--muted)' : 'var(--text)' }}>{g.oppName}</span>
@@ -265,7 +272,7 @@ function WBCScheduleSection() {
 // ─── SCHEDULE VIEW ────────────────────────────────────────────────────────────
 export function ScheduleView({ userData, onEditGame }) {
   const { gameRecords = {} } = userData;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalStr();
   const [expandedId, setExpandedId] = useState(null);
   const [schedMode, setSchedMode]   = useState('promo'); // 'promo' | 'spring' | 'regular' | 'wbc'
 
@@ -511,7 +518,43 @@ export function ScheduleView({ userData, onEditGame }) {
 // ─── MY GAMES VIEW ────────────────────────────────────────────────────────────
 export function MyGamesView({ userData, onEditGame }) {
   const { gameRecords = {} } = userData;
-  const attended = PROMOS.filter(p => gameRecords[p.id]?.attended);
+
+  // Merge two sources of attended games:
+  //   1. The hardcoded PROMOS list (promo-tracker entries, keyed by numeric id)
+  //   2. Any record in gameRecords that's marked attended but isn't a PROMO id
+  //      (e.g. games logged via the Full Schedule → `mlb_<gamePk>`). These carry
+  //      their metadata on `rec.game` so we can render them without a PROMOS lookup.
+  const attended = useMemo(() => {
+    const byKey = new Map();
+    for (const p of PROMOS) {
+      if (gameRecords[p.id]?.attended) byKey.set(String(p.id), p);
+    }
+    for (const [key, rec] of Object.entries(gameRecords)) {
+      if (!rec?.attended || byKey.has(key)) continue;
+      const meta = rec.game || {};
+      byKey.set(key, {
+        id:       key,
+        emoji:    meta.emoji    || '⚾',
+        opponent: meta.opponent || 'Game',
+        oppShort: (meta.opponent || '').split(' ').pop(),
+        display:  meta.display  || meta.isoDate || '',
+        time:     meta.time     || '',
+        icon:     meta.icon     || '⚾',
+        promo:    meta.promo    || '',
+        isoDate:  meta.isoDate  || '',
+        isHome:   meta.isHome,
+        venue:    meta.venue    || '',
+        gamePk:   meta.gamePk,
+      });
+    }
+    // Sort newest → oldest by isoDate when available
+    return Array.from(byKey.values()).sort((a, b) => {
+      const aD = a.isoDate || '';
+      const bD = b.isoDate || '';
+      return bD.localeCompare(aD);
+    });
+  }, [gameRecords]);
+
   const totalSpent = attended.reduce((sum, p) => sum + (gameRecords[p.id]?.totalCost || 0), 0);
   const wins   = attended.filter(p => gameRecords[p.id]?.result === 'W').length;
   const losses = attended.filter(p => gameRecords[p.id]?.result === 'L').length;

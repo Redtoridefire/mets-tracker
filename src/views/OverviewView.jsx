@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { useWeather, weatherIcon, useMLBSchedule, useMLBStandings, useMLBFullSchedule, useMLBTeamStats } from '../hooks.js';
 import { PROMOS } from '../data/promos.js';
 import { getDailyFact, CATEGORY_COLORS } from '../data/mets-facts.js';
+import { todayLocalStr } from '../dateUtil.js';
 
 // ─── SPRING TRAINING CARD ─────────────────────────────────────────────────────
 function SpringTrainingCard() {
   const { games, loading } = useMLBFullSchedule();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalStr();
   const month = new Date().getMonth() + 1; // 1–12
 
   const stGames  = games.filter(g => g.gameType === 'S');
@@ -427,7 +428,7 @@ function GameDayCard({ todayGame, todayPromo, onLogGame }) {
 
 export default function OverviewView({ userData, todayGame, todayPromo, onLogGame }) {
   const { gameRecords = {}, eggrollLog = {} } = userData;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalStr();
 
   const attended       = Object.values(gameRecords).filter(r => r?.attended).length;
   const planned        = Object.values(gameRecords).filter(r => r?.planned && !r?.attended).length;
